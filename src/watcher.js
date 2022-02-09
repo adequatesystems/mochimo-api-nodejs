@@ -1,6 +1,6 @@
 /**
- *  apiFilesystemWatcher.js; Filesystem watcher for MochiMap
- *  Copyright (C) 2021  Chrisdigity
+ *  watcher.js; File System Watcher for MochiMap
+ *  Copyright (C) 2021-2022  Chrisdigity
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as published
@@ -20,132 +20,94 @@
 /* modules and utilities */
 const fs = require('fs');
 
-/* FilesystemWatcher */
-class FilesystemWatcher {
-  init (fpath = this.fpath, options = this.options, callback = this.callback) {
-    // parameter forwarding for callback when undefined
-    if (typeof callback === 'undefined') {
-      callback = options;
-      options = {};
-    } // end parameter forwarding
-    // parameter type checks
-    if (typeof fpath !== 'string') {
-      throw new Error('path parameter must be a string');
-    } else if (typeof options !== 'object') {
-      throw new Error('options parameter must be n object');
-    } else if (typeof callback !== 'function') {
-      throw new Error('callback parameter must be a function');
-    } // end parameter type checks
-    // initialize cleanup crew
-    if (!this.cleanupInitialized) {
-      this.cleanupInitialized = true;
-      process.on('SIGINT', this.cleanup.bind(this));
-      process.on('SIGTERM', this.cleanup.bind(this));
-    } // end if (!this.cleanupInitialized...
-    // store parameters in instance
-    this.fpath = fpath;
-    this.options = options;
-    this.callback = callback;
-    // declare fpath basename
-    this.fbase = require('path').basename(fpath);
-    // declare initialization error count
-    this._ecount = this._ecount || 0;
-    try { // try ... perform initial stat of path
-      fs.stat(this.fpath, this.handleStat.bind(this, 'init', this.fpath));
-      if (!options.scanOnly) { // try ... watching for path changes
+/* Watcher */
+module.exports =
+class Watcher {
+  constructor ({ name, scanOnly, target }) {
+    name = name || 'Watcher';
+    // derive basename from target
+    const basename = require('path').basename(target);
+    // apply instance parameters
+    Object.assign(this, { basename, name, scanOnly, target });
+    // initialize "watcher"
+    console.log(this.name, '// init watcher ->', this.target);
+    this.init();
+  } // end constructor
+
+  cleanup () {
+    if (this._watch) {
+      console.log(this.name, '// terminating...');
+      this._watch.close();
+      this._watch = undefined;
+    }
+    if (this._inittimeout) {
+      console.log(this.name, '// clearing timeout...');
+      clearTimeout(this._inittimeout);
+      this._inittimeout = undefined;
+    }
+  }
+
+  init () {
+    try { // perform initial stat of target
+      fs.stat(this.target, this.handleStat.bind(this, 'init', this.target));
+      if (!this.scanOnly) { // watch for target changes
         if (this._watch) this._watch.close(); // close existing watchers
-        this._watch = fs.watch(this.fpath, this.handleWatch.bind(this));
+        this._watch = fs.watch(this.target, this.handleWatch.bind(this));
         this._watch.on('error', this.handleWatchError.bind(this));
-        this._ecount = 0; // reset initialization error count
-        this.log('INIT', 'watcher started...');
-      } // end if (!options.scanOnly...
-    } catch (error) { // an error occurred initializing watcher, report/retry
-      this._ecount++; // increment initialization error count
-      this.log('INIT', `reinitializing in ${this._ecount} seconds...`, error);
-      this._timeout = setTimeout(this.init.bind(this), this._ecount * 1000);
-    } // end try...
-  } // end init...
+      }
+    } catch (error) { // an error during init, report/retry
+      this._inittimeout = setTimeout(this.init.bind(this), 5000);
+      if (error.code !== 'ENOENT') {
+        console.error(this.name, '// re-init in 5s...', error);
+      }
+    }
+  }
 
   handleStat (eventType, filename, errstat, stats) {
     if (errstat) { // handle immediate stat error
       if (errstat.code === 'ENOENT') { // acknowledge ENOENT errors
-        this.log('STAT', `ENOENT ${eventType} event on ${filename}`);
-        this.handleUnwatch(eventType, filename); // unnecessary return
-      } else this.error('STAT', `-> ${filename}, ${errstat}`);
+        this.handleUnwatch(eventType, filename);
+      } else console.error(this.name, `// STAT -> ${filename}`, errstat);
     } else if (!this.handleUnwatch(eventType, filename)) {
       // handle successful stat result
       switch (true) { // check Dirent type
         case stats.isDirectory():
           if (eventType === 'init') {
             const options = { withFileTypes: true };
-            return fs.readdir(this.fpath, options, this.handleDir.bind(this));
-          } // end if (eventType...
+            return fs.readdir(this.target, options, this.handleDir.bind(this));
+          }
         case stats.isFile(): // eslint-disable-line no-fallthrough
-          return this.callback(stats, eventType, filename);
-        case stats.isSymbolicLink():
-        case stats.isFIFO():
-        case stats.isSocket():
-        case stats.isCharacterDevice():
-        case stats.isBlockDevice():
-          return this.error('STAT', 'Dirent must describe a file or directory');
+          if (this.handler) return this.handler(stats, eventType, filename);
+          return;
         default: // unknown Dirent type
-          return this.error('STAT', 'unknown Dirent type');
+          return console.error(this.name, '// STAT -> unknown Dirent type');
       } // end switch (true...
     } // end if (error... else...
   } // end handleStat...
 
   handleWatchError (error) {
-    this.error('', error);
+    console.error(this.name, '//', error);
     return this.init();
-  } // end handleWatch...
+  }
 
   handleWatch (eventType, filename) {
-    fs.stat(this.fpath, this.handleStat.bind(this, eventType, filename));
-  } // end handleWatch...
+    fs.stat(this.target, this.handleStat.bind(this, eventType, filename));
+  }
 
   handleUnwatch (eventType, filename) {
-    if (eventType === 'rename' && filename === this.fbase) {
-      this.log('STAT', 'reinitializing in 1 second...');
-      this._timeout = setTimeout(this.init.bind(this), 1000);
+    if (eventType === 'rename' && filename === this.basename) {
+      this._inittimeout = setTimeout(this.init.bind(this), 1000);
       return true; // watch reinitialization
-    } // end if (eventType === 'rename'...
-    return false; // watch ok
-  } // end handleUnwatch...
+    } else return false; // watch ok
+  }
 
   handleDir (error, statsArray) {
-    if (error) this.error('READDIR', error);
+    if (error) console.error(this.name, '//', error);
     else { // report on size of, and handle, statsArray
-      this.log('INIT', `found ${statsArray.length} entities...`);
+      console.log(this.name, '//', `found ${statsArray.length} entities...`);
       for (const stats of statsArray) {
-        this.handleStat.bind(this)('rename', stats.name, undefined, stats);
-      } // end for...
-    } // end if (err... else...
-  } // end handleDir...
-
-  log (type, message, error) {
-    if (error) this.error(type, error);
-    return console.log(
-      `// WATCHER${type ? ` ${type}` : ''}: ${this.fbase}, ${message}`
-    ); // end return...
-  } // end log...
-
-  error (type, message) {
-    return console.error(
-      `// WATCHER${type ? ` ${type}` : ''} ERROR: ${this.fbase}, ${message}`
-    ); // end return...
-  } // end error...
-
-  cleanup () {
-    if (this._watch) {
-      console.log(`// CLEANUP: terminating watch on ${this.fbase}...`);
-      this._watch.close();
-    } // end _watch cleanup
-    if (this._timeout) {
-      console.log(`// CLEANUP: terminating watch timeout for ${this.fbase}...`);
-      clearTimeout(this._timeout);
-    } // end _timeout cleanup
-  } // end cleanup...
-} // end class FilesystemWatcher...
-
-/* export FilesystemWatcher class */
-module.exports = FilesystemWatcher;
+        this.handleStat('rename', stats.name, undefined, stats);
+      }
+    }
+  }
+}; // end class Watcher...

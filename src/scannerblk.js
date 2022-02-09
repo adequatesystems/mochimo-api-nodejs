@@ -1,6 +1,6 @@
 /**
- *  bcUtils.js; MochiMap Blockchain Utilities
- *  Copyright (C) 2021  Chrisdigity
+ *  scannerblk.js; Mochimo Blockchain scanner for MochiMap
+ *  Copyright (C) 2021-2022  Chrisdigity
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as published
@@ -17,267 +17,245 @@
  *
  */
 
-const fs = require('fs');
-const path = require('path');
+/* modules and utilities */
+const Watcher = require('./watcher');
 const { createHash } = require('crypto');
-const { asUint64String, readWeb } = require('./apiUtils');
-const Db = require('./apiDatabase');
-const Mochimo = require('mochimo');
-const TRACE = console.trace;
+const mochimo = require('mochimo');
+const path = require('path');
+const fs = require('fs');
 
-const processRichlist = async (data) => {
-  if (!data || process.env.DISABLEBCRICHLIST) return;
-  // expose bnum, bhash and ledger from data
-  let { ledger } = data;
-  const { bnum, bhash } = data;
-  const _bid = Db.util.id.block(bnum, bhash);
-  // build ledger JSON, as array of ranked ledger entries (BigInt filtered)
-  ledger = Db.util.filterBigInt(ledger.sort((a, b) => {
-    return Number(b.balance - a.balance); // ~1 minute for ~10 million entries
-  }).map((lentry, index, array) => {
-    let { address } = lentry;
-    const { balance, tag } = lentry;
-    const rank = index + 1;
-    const dbrank = array.length - rank;
-    const addressHash = createHash('sha256').update(address).digest('hex');
-    const _id = Db.util.id.ledger(bnum, bhash, asUint64String(dbrank));
-    address = address.slice(0, 64);
-    return { _id, address, addressHash, tag, balance, rank };
-  }));
-  // log database insert; array of ranked ledger entries
-  const res = await Db.insert('richlist', ledger);
-  console.log(_bid.replace(/^0{0,15}/, '0x').slice(0, -8), res, 'x Richlist');
+function iferror (msg, err) {
+  if (err) console.error(this.name, msg, err);
+}
+
+const farchive = (bnum, bhash) => {
+  return `b${asUint64String(bnum)}x${bhash.slice(0, 8)}.bc`;
 };
 
-const processLedger = async (block, srcdir) => {
-  if (process.env.DISABLEBCLEDGER) return;
-  // expose bnum, bhash and stime from block data
-  const { bnum, bhash, stime } = block;
-  const _bid = Db.util.id.block(bnum, bhash);
-  // obtain previous neogenesis block data
-  const pngfname = path.join(srcdir, `b${asUint64String(bnum - 256n)}.bc`);
-  const pngdata = fs.readFileSync(pngfname);
-  // perform pre-checks on previous neogenesis block data
-  if (typeof pngdata !== 'object') {
-    throw new TypeError(`"pngdata" is not an object: ${typeof pngdata}`);
-  } else if (!pngdata.length >= Mochimo.BlockTrailer.length + 4) {
-    throw new Error(`"pngdata.length" is insufficient: ${pngdata.length}`);
+const asUint64String = (bigint) => {
+  return BigInt.asUintN(64, BigInt(bigint)).toString(16).padStart(16, '0');
+};
+
+/* Block Scanner */
+module.exports =
+class BlockScanner extends Watcher {
+  constructor ({ archivedir, backupdir, db, emit, name, scanOnly, target }) {
+    // apply default parameters
+    archivedir = archivedir || path.join(process.cwd(), 'archive');
+    backupdir = backupdir || path.join(process.cwd(), 'backup');
+    name = name || 'BlockchainScanner';
+    target = target || path.join(
+      path.sep, 'home', 'mochimo-node', 'mochimo', 'bin', 'd', 'bc'
+    );
+    // Watcher()
+    super({ name: 'BLKSCANNER', target, scanOnly });
+    // apply instance parameters
+    Object.assign(this, {
+      archivedir, backupdir, db, emit, name, scanOnly, target
+    });
+    this.dbfail = false;
+    this.processing = false;
+    this.queue = [];
   }
-  // interpret pngdata as block and perform block hash verification check
-  const pngblock = new Mochimo.Block(pngdata);
-  if (!pngblock.verifyBlockHash()) {
-    throw new Error('"pngblock" hash could not be verified');
-  }
-  // create list of previous address balances (prioritise Tags for id)
-  const pngaddr = {};
-  const pngledger = pngblock.ledger;
-  for (const lentry of pngledger) {
-    let { address } = lentry;
-    const { balance, tag } = lentry;
-    const addressHash = createHash('sha256').update(address).digest('hex');
-    const byte = Number('0x' + tag.slice(0, 2));
-    const id = Mochimo.UNTAGGED_BYTES.includes(byte) ? addressHash : tag;
-    address = address.slice(0, 64);
-    pngaddr[id] = { address, addressHash, tag, balance, delta: -(balance) };
-  }
-  // build ledger JSON, as array of documents where address balances have deltas
-  const ledgerPush = { bhash, timestamp: stime, bnum };
-  let ledgerJSON = [];
-  // obtain ledger list for scanning (and later richlist processing)
-  const { ledger } = block;
-  // scan current neogenesis block and compare to previous
-  for (const lentry of ledger) {
-    // get appropriate address/balance and check for a change in balance
-    let { address } = lentry;
-    const { balance, tag } = lentry;
-    const addressHash = createHash('sha256').update(address).digest('hex');
-    const byte = Number('0x' + tag.slice(0, 2));
-    const id = Mochimo.UNTAGGED_BYTES.includes(byte) ? addressHash : tag;
-    const pbalance = pngaddr[id] ? pngaddr[id].balance : 0n;
-    if (pbalance !== balance) {
-      // push balance delta and details to ledgerJSON
-      const delta = balance - pbalance;
-      const _id = Db.util.id.ledger(bnum, bhash, id);
-      address = address.slice(0, 64);
-      Object.assign(ledgerPush, { address, addressHash, tag, balance, delta });
-      ledgerJSON.push(Object.assign({ _id }, ledgerPush));
+
+  cleanup () {
+    super.cleanup();
+    if (this._watchrecovery) {
+      console.log(this.name, '// recovery terminating...');
+      this._watchrecovery.close();
+      this._watchrecovery = undefined;
     }
-    // remove entry from previous cache
-    delete pngaddr[id];
   }
-  // process remaining pngaddr as emptied
-  for (const [id, details] of Object.entries(pngaddr)) {
-    // push balance delta as 0 balance address to ledgerJSON
-    details.balance = 0n;
-    const _id = Db.util.id.ledger(bnum, bhash, id);
-    ledgerJSON.push(Object.assign({ _id }, Object.assign(ledgerPush, details)));
-  }
-  // filter BigInt from ledgerJSON
-  ledgerJSON = Db.util.filterBigInt(ledgerJSON);
-  // log database insert; array of ledger balance deltas
-  const res = await Db.insert('ledger', ledgerJSON);
-  console.log(_bid.replace(/^0{0,15}/, '0x').slice(0, -8), res, 'x Ledger');
-  // return ledger list for further processing
-  return { bnum, bhash, ledger };
-};
 
-const processTransactions = async (block) => {
-  if (process.env.DISABLEBCTRANSACTIONS) return;
-  // expose bnum, bhash and stime from block data
-  const { bnum, bhash, stime, transactions } = block;
-  // format transactions as array of delete operations for unconfirmed
-  const unconfirmed = transactions.map((txe) => {
-    // delete memProcessor recorded transactions found in this block
-    const _id = Db.util.id.transaction(-1, -1, txe.txid);
-    return { deleteOne: { filter: { _id } } };
-  }); // format transactions as array of insert operations for confirmed
-  const confirmed = transactions.map((txe) => {
-    // insert as minified txe prepended with _id, stime, bnum and bhash
-    const _id = Db.util.id.transaction(bnum, bhash, txe.txid);
-    return { _id, stime, bnum, bhash, ...txe.toJSON(true) };
-  }); // declare logging constants
-  const _bidRegex = /^0{0,15}(.*).{8}$/;
-  const _bid = Db.util.id.block(bnum, bhash).replace(_bidRegex, '0x$1');
-  // execute and log confirmed transaction insertMany operation
-  const res = await Db.insert('transaction', Db.util.filterBigInt(confirmed));
-  console.log(_bid, res, 'x Confirmed Txs');
-  // execute and log unconfirmed transaction bulkWrite delete operations
-  await Db.bulk('transaction', Db.util.filterBigInt(unconfirmed));
-  console.log(_bid, -(unconfirmed.length), 'x Unconfirmed Txs');
-};
-
-const processHaikuVisualization = async (block) => {
-  if (process.env.DISABLEBCHAIKU) return;
-  // expose bnum, bhash, phash and nonce from block
-  let { nonce } = block;
-  const { bnum, bhash, phash } = block;
-  const _id = Db.util.id.block(bnum, bhash);
-  // if necessary search previous blocks until there's no shadow (shadow == 0)
-  let shadow = Number(block.type !== Mochimo.Block.NORMAL);
-  let pblock;
-  while (shadow) {
-    const pbnum = (pblock ? pblock.bnum : bnum) - 1n;
-    const pbhash = pblock ? pblock.phash : phash;
-    const pblockid = Db.util.id.block(pbnum, pbhash);
-    pblock = await Db.findOne('block', { _id: pblockid });
-    if (!pblock) throw new Error('Cannot visualize haiku, missing ' + pblockid);
-    nonce = pblock.nonce;
-    shadow += nonce ? -1 : 1;
-  }
-  // return shadow to previous state as a Boolean
-  shadow = Boolean(block.type !== Mochimo.Block.NORMAL);
-  // expand nonce to Haiku
-  const haiku = Mochimo.Trigg.expand(nonce, shadow);
-  // heuristically determine best picture query for haiku
-  const algo = (haiku, arr, ...comp) => { // condensed heuristic algorithm
-    let pi, ps, is, str;
-    const ts = haiku.match(/\b\w{3,}\b/g).map(t => new RegExp(t, 'g'));
-    for (let i = pi = ps = is = 0; i < arr.length; i++, is = 0, str = '') {
-      for (const app of comp) str += ' ' + arr[i][app];
-      for (const reg of ts) is += (str.match(reg) || []).length;
-      if (is > ps) { ps = is; pi = i; }
-    } return { photo: arr[pi], ps };
-  };
-  const search = haiku.match(/((?<=[ ]))\w+((?=\n)|(?=\W+\n)|(?=\s$))/g);
-  const query = search.join('%20');
-  const data = { img: { haiku, shadow } };
-  try { // build Pexels options
-    const pexelsOptions = {
-      hostname: 'api.pexels.com',
-      path: `/v1/search?query=${query}&per_page=80`,
-      headers: { Authorization: process.env.PEXELS }
-    }; // request results from Pexels
-    const res = process.env.PEXELS ? await readWeb(pexelsOptions) : {};
-    // apply algorithm or throw error
-    if (res.photos && res.photos.length) {
-      const sol = algo(haiku, res.photos, 'url');
-      if (!data.sol || data.sol.ps > sol.ps) {
-        data.sol = sol; // derive pexels photo data
-        data.img.author = sol.photo.photographer || 'Unknown';
-        data.img.authorurl = sol.photo.photographer_url || 'pexels.com';
-        data.img.desc = sol.photo.url.match(/\w+(?=-)/g).join(' ');
-        data.img.src = sol.photo.src.large;
-        data.img.srcid = 'Pexels';
-        data.img.srcurl = sol.photo.url;
-        data.img.thumb = sol.photo.src.tiny;
+  async handler (stats, eventType, filename) {
+    // accept only 'rename' events where filename extension is '.bc'
+    if (filename && filename.endsWith('.bc') && eventType === 'rename') {
+      // add file to queue (blocks can be large, do one at a time)
+      this.queue.push(path.join(this.target, filename));
+      // start queue processor if not already
+      if (!this.processing) {
+        this.processing = true;
+        setImmediate(this.procBlocks.bind(this));
       }
-    } else throw new Error(res.error || 'no "photos" in results');
-  } catch (error) { console.trace('Pexels request ERROR:', error); }
-  try { // build Unsplash options
-    const unsplashOptions = {
-      hostname: 'api.unsplash.com',
-      path: `/search/photos?query=${query}&per_page=30`,
-      headers: { Authorization: 'Client-ID ' + process.env.UNSPLASH }
-    }; // request results from Unsplash
-    const res = process.env.UNSPLASH ? await readWeb(unsplashOptions) : {};
-    // apply algorithm or throw error
-    if (res.results && res.results.length) {
-      const sol = algo(haiku, res.results, 'description', 'alt_description');
-      if (!data.sol || data.sol.ps > sol.ps) {
-        data.sol = sol; // derive pexels photo data
-        data.img.author = sol.photo.user.name || 'Unknown';
-        data.img.authorurl = sol.photo.user.links.html || 'unsplash.com';
-        data.img.desc = sol.photo.description;
-        data.img.src = sol.photo.urls.regular;
-        data.img.srcid = 'Unsplash';
-        data.img.srcurl = sol.photo.links.html;
-        data.img.thumb = sol.photo.urls.thumb;
-      }
-    } else throw new Error(res.errors || 'no "results" in results');
-  } catch (error) { console.trace('Unsplash request ERROR:', error); }
-  // return data without solution
-  if (!data.sol) throw new Error('Unable to determine visualization for Haiku');
-  delete data.sol;
-  // apply atomic operators to document update
-  const haikuUpdate = { $set: data };
-  // log database update; haiku visualization data block update
-  const res = await Db.update('block', haikuUpdate, { _id });
-  console.log(_id.replace(/^0{0,15}/, '0x').slice(0, -8), res, 'x Haiku');
-};
+    } // end if (filename...
+  } // end handler...
 
-const processBlock = async (data, srcdir) => {
-  // perform pre-checks on data
-  if (typeof data !== 'object') {
-    throw new TypeError(`"data" is not an object: ${typeof data}`);
-  } else if (!data.length >= Mochimo.BlockTrailer.length + 4) {
-    throw new Error(`"data.length" is insufficient: ${data.length}`);
-  }
-  // interpret data as Mochimo Block and perform block hash verification check
-  const block = new Mochimo.Block(data);
-  if (!block.verifyBlockHash()) {
-    throw new Error('"block" hash could not be verified');
-  }
-  // check database for existing store
-  const { bnum, bhash } = block;
-  const _id = Db.util.id.block(bnum, bhash);
-  const _bid = _id.replace(/^0{0,15}/, '0x').slice(0, -8);
-  if (!(await Db.has('block', bnum, bhash))) {
-    // build block document and, if accepted, proceed with remaining documents
-    try { // prepend _id to minified blockJSON
-      const blockJSON = Object.assign({ _id }, block.toJSON(true));
-      // record result of, and log, database insert; BigInt filtered block data
-      const res = await Db.insert('block', Db.util.filterBigInt(blockJSON));
-      console.log(_bid, res, 'x Block');
-      if (res) {
-        // BLOCK TYPE:
-        // - GENESIS or NEOGENESIS; process ledger balance deltas and richlist
-        // - NORMAL; process transactions
-        switch (block.type) {
-          case Mochimo.Block.GENESIS:
-          case Mochimo.Block.NEOGENESIS:
-            processLedger(block, srcdir).then(processRichlist).catch(TRACE);
-            break;
-          case Mochimo.Block.NORMAL:
-            processTransactions(block).catch(TRACE);
-            break;
+  async procBlocks () {
+    // obtain next block filepath
+    const filepath = this.queue.shift();
+    let filename = path.basename(filepath);
+    let data;
+    try {
+      // check access and read file
+      await fs.promises.access(filepath, fs.constants.R_OK);
+      data = await fs.promises.readFile(filepath);
+      // interpret data as mochimo Block
+      const block = new mochimo.Block(data);
+      // invalid block checks
+      if (data.length % mochimo.LEntry.length !== 164 && // pseudo || neogen
+          data.length % mochimo.TXEntry.length !== 2380) { // normal
+        throw new Error(`${filepath} invalid block size: ${data.length}`);
+      } else if (!block.verifyBlockHash()) {
+        throw new Error(`${filepath} invalid block hash`);
+      }
+      // extract bnum and bhash
+      const { bnum, bhash, stime, time0 } = block;
+      // edit filename for archives
+      filename = farchive(bnum, bhash);
+      // build JSON block data for INSERT
+      const created = new Date(stime * 1000);
+      const started = new Date(time0 * 1000);
+      const blockJSON = { created, started, ...block.toJSON(true) };
+      delete blockJSON.stime; delete blockJSON.time0;
+      // perform (and wait for successful) INSERT
+      await this.db.promise().query('INSERT INTO `block` SET ?', blockJSON);
+      // emit to stream
+      if (this.emit) this.emit(blockJSON, 'block');
+      // Transaction processing
+      if (blockJSON.type === mochimo.Block.NORMAL) {
+        // declare additional parameters for trasaction submissions
+        const confirmed = created;
+        const transactionAddDb = { created, confirmed, bnum, bhash };
+        // INSERT transactions as IODKU operations for confirmed
+        for (const txentry of block.transactions) {
+          this.db.query(
+            'INSERT INTO `transaction` SET ? ON DUPLICATE KEY UPDATE' +
+            '`confirmed` = VALUES(`confirmed`), ' +
+            '`bnum` = VALUES(`bnum`), `bhash` = VALUES(`bhash`)',
+            { ...transactionAddDb, ...txentry.toJSON(true) },
+            iferror.bind(this, '// transaction INSERT'));
         }
-        // process haiku update regardless of block type
-        processHaikuVisualization(block).catch(TRACE);
       }
-    } catch (error) { console.error(_bid, error); }
-  } else console.log(_bid, 'already processed');
-  // return block identifier (_id)
-  return _id;
-};
+      // Ledger processing
+      if (blockJSON.type === mochimo.Block.GENESIS ||
+          blockJSON.type === mochimo.Block.NEOGENESIS) {
+        // obtain previous neogenesis block data
+        const pngaddr = {};
+        try {
+          if (bnum < 256n) throw new Error('No Neoegenesis before Genesis');
+          const pngfilepath = path.join(
+            this.target, `b${asUint64String(bnum - 256n)}.bc`);
+          // read previous neogen data
+          const pngdata = await fs.promises.readFile(pngfilepath);
+          // perform pre-checks on pngdata
+          if (pngdata.length % mochimo.LEntry.length !== 164) {
+            throw new Error(`${filepath} has invalid size: ${pngdata.length}`);
+          }
+          // interpret blockdata as mochimo Block
+          const pngblock = new mochimo.Block(pngdata);
+          // perform block hash verification check
+          if (!pngblock.verifyBlockHash()) {
+            throw new Error(`${filepath} block hash could not be verified`);
+          }
+          // create list of previous address balances
+          for (const lentry of pngblock.ledger) {
+            let { address } = lentry;
+            const { balance, tag } = lentry;
+            const delta = -(balance);
+            const id = createHash('sha256').update(address).digest('hex');
+            address = address.slice(0, 64);
+            pngaddr[id] = { address, addressHash: id, tag, balance, delta };
+          }
+        } catch (pngError) {
+          // report error and continue
+          console.warn(this.name, '// Previous Neogenesis', pngError);
+        }
+        // build array of ledger entries, then rank (sort) by descending balance
+        const ledger = block.ledger.map((lentry) => {
+          let { address } = lentry;
+          const { balance, tag } = lentry;
+          const addressHash = createHash('sha256').update(address).digest('hex');
+          address = address.slice(0, 64);
+          return { address, addressHash, tag, balance };
+        }).sort((a, b) => {
+          return (a.balance < b.balance) ? 1 : (a.balance > b.balance) ? -1 : 0;
+        });
+        // declare additional parameters for balance delta submissions
+        const balananceAddDb = { created, bnum, bhash };
+        let rank; // for every rank (or ledger entry)...
+        for (rank = 0; rank < ledger.length; rank++) {
+          // ... apply rank to entry and submit to richlist database
+          const lentry = ledger[rank];
+          const id = lentry.addressHash;
+          this.db.query('REPLACE INTO `richlist` SET ?',
+            { rank: rank + 1, ...lentry },
+            iferror.bind(this, '// richlist REPLACE'));
+          // ... determine balance delta and submit to balance database
+          const pbalance = pngaddr[id] ? pngaddr[id].balance : 0n;
+          if (pbalance !== lentry.balance) {
+            // determine delta and push change
+            const delta = lentry.balance - pbalance;
+            this.db.query('INSERT INTO `balance` SET ?',
+              { ...balananceAddDb, ...lentry, delta },
+              iferror.bind(this, '// balance INSERT'));
+          }
+          // remove entry from pngaddr cache
+          delete pngaddr[id];
+        }
+        // DELETE remaining richlist ranks (if any)
+        this.db.query('DELETE FROM `richlist` WHERE `rank` > ?', rank,
+          iferror.bind(this, '// richlist DELETE'));
+        // INSERT remaining pngaddr as emptied
+        for (const id in pngaddr) {
+          this.db.query('INSERT INTO `balance` SET ?',
+            { ...balananceAddDb, ...pngaddr[id], balance: 0n },
+            iferror.bind(this, '// remaining balance INSERT'));
+        }
+      }
+      // check recovery flag
+      if (this.dbfail) {
+        this.dbfail = false;
+        this.recoverBackups();
+      }
+    } catch (error) {
+      // check database errors
+      if ('sql' in error) {
+        // for non duplicate entry errors...
+        if (error.code !== 'ER_DUP_ENTRY') {
+          // ... attempt to backup block for later recovery
+          if (data) {
+            this.writeBlock(data, filename, this.backupdir).catch((error) => {
+              console.error(this.name, '// BACKUP', error);
+            });
+          }
+          // ... report and flag error (if not already)
+          console.error(this.name, '// DB', error);
+          if (this.dbflag === false) {
+            console.log(this.name, '// DB FAILURE MODE ACTIVATED');
+            this.dbfail = true;
+          }
+        }
+      } else
+      // ignore file errors that don't or no longer exist
+      if (error.code !== 'ENOENT') {
+        console.error(this.name, '//', error);
+      }
+    } finally {
+      // attempt to archive block for storage
+      if (data) {
+        this.writeBlock(data, filename, this.archivedir).catch((error) => {
+          console.error(this.name, '// ARCHIVE', error);
+        });
+      }
+      // continue processing of blocks (if any remaining)
+      if (this.queue.length) {
+        setImmediate(this.procBlocks.bind(this));
+      } else this.processing = false;
+    }
+  }
 
-module.exports = { processBlock };
+  recoverBackups () {
+    console.log(this.name, '// DB RECOVERY MODE ACTIVATED');
+    // reset db failure mode
+    this.dbfail = false;
+    // create new Watcher in scanOnly mode
+    this._watchrecovery = new Watcher({
+      name: 'BLKRECOVERYSCAN', scanOnly: true, target: this.backupdir
+    });
+  }
+
+  async writeBlock (data, fname, dir) {
+    await fs.promises.mkdir(dir, { recursive: true });
+    await fs.promises.writeFile(path.join(dir, fname), data);
+  }
+};

@@ -1,7 +1,6 @@
-#!/usr/bin/env node
 /**
- *  netScanner.js; Mochimo Network scanner for MochiMap
- *  Copyright (C) 2021  Chrisdigity
+ *  netscanner.js; Mochimo Network scanner for MochiMap
+ *  Copyright (C) 2021-2022  Chrisdigity
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as published
@@ -18,215 +17,188 @@
  *
  */
 
-console.log('\n// START:', __filename);
+/* constants */
+const MS7DAY = 7 * 24 * 60 * 60 * 1000;
+const MS3DAY = 3 * 24 * 60 * 60 * 1000;
+const MS30SECOND = 30 * 1000;
 
-/* environment variables */
-require('dotenv').config();
-
-/* region check */
-if (typeof process.env.REGION === 'undefined') {
-  console.warn('// WARNING: region is undefined');
-  console.warn('// network region data will not be recorded...');
-}
-
-/* ipinfo token check */
-if (typeof process.env.IPINFO === 'undefined') {
-  console.warn('// WARNING: ipinfo token is undefined');
-  console.warn('// host data will not be recorded...');
-}
-
-/* global BigInt */
-/* eslint no-extend-native: ["error", { "exceptions": ["BigInt"] }] */
-BigInt.prototype.toJSON = function () { return this.toString(); };
-
-const fs = require('fs');
-const fsp = fs.promises;
-const { isIPv4 } = require('net');
-const {
-  informedShutdown,
-  isPrivateIPv4,
-  ms,
-  readWeb
-} = require('./apiUtils');
-const Db = require('./apiDatabase');
+/* modules and utilities */
+const { IPinfoWrapper, LruCache } = require('node-ipinfo');
 const Mochimo = require('mochimo');
+const Lru = require('lru-cache');
 
-const IPINFOQuery = '/json?token=' + process.env.IPINFO;
-const REGION = process.env.REGION || undefined;
-const STARTLIST = [
-  'https://www.mochimap.com/startnodes.lst',
-  'https://www.mochimap.net/startnodes.lst',
-  'https://mochimo.org/startnodes.lst',
-  process.env.STARTLIST
-];
-const INTERVAL = {
-  host: ms.week, // time between IPINFO host information requests
-  idle: ms.second * 60, // allowable network communications loss
-  monitor: ms.second * 337.5, // target Mochimo block time
-  run: ms.second,
-  stale: ms.day * 3,
-  update: ms.second * 30
-};
+/* environment initialization */
+require('dotenv').config();
+const MAXIPNUM = process.env.MAXIPNUM || 5000;
+const MAXIPAGE = process.env.MAXIPAGE || MS7DAY;
+const MAXNODEAGE = process.env.MAXNODEAGE || MS3DAY;
+const MAXSCAN = process.env.MAXSCAN || 128;
+const IPINFOTOKEN = process.env.IPINFOTOKEN;
+const NODEIP = process.env.NODEIP || '127.0.0.1';
 
-const Scanner = {
-  _cache: new Map(),
-  _recent: new Set(),
-  _scanning: new Set(),
-  _timeidle: undefined,
-  _timemonitor: Date.now(),
-  _timeout: undefined,
-  init: async () => {
-    console.log('// INIT: network scanner...');
-    for (const source of STARTLIST) {
-      if (!source) return;
-      try { // download and decipher data from source
-        const sizeBefore = Scanner._recent.size;
-        let data = source.startsWith('http')
-          ? await readWeb(source)
-          : await fsp.readFile(source, 'utf8');
-        if (typeof data === 'string') {
-          data = (data.match(/(^|(?<=\n))[\w.]+/g) || []);
-          data = data.filter(ip => isIPv4(ip) && !isPrivateIPv4(ip));
-          if (data.length) for (const ip of data) Scanner._recent.add(ip);
-        }
-        const sizeDiff = Scanner._recent.size - sizeBefore;
-        console.log(source, `(${sizeDiff})`);
-      } catch (error) { console.error(source, error); }
+/* ipinfo initialization */
+const ipinfoCache = new LruCache({ max: MAXIPNUM, maxAge: MAXIPAGE });
+const ipinfo = new IPinfoWrapper(IPINFOTOKEN, ipinfoCache);
+
+/* Network Scanner class */
+module.exports =
+class NetworkScanner {
+  constructor ({ emit }) {
+    /* environment check */
+    if (IPINFOTOKEN === 'undefined') {
+      console.warn(this.name, '//', 'missing IPINFOTOKEN');
+      console.warn(this.name, '//', 'IP info will not be available');
     }
-  },
-  run: () => {
-    const now = Date.now();
-    // queue next Scanner.run() to execute approx. every second
-    Scanner._timeout = setTimeout(Scanner.run, INTERVAL.run);
-    // rebuild current (global) peerlist from active and associated peers
-    const current = new Set();
-    Scanner._cache.forEach((node, ip) => {
-      if (node.status === Mochimo.VEOK) {
-        // add node host ip and peerlist ip's
-        current.add(ip);
-        node.peers.forEach((peer) => {
-          // ignore private IP addresses
-          if (!isPrivateIPv4(peer)) {
-            Scanner._recent.add(peer);
-            current.add(peer);
-          }
-        });
-      }
+    // apply instance parameters
+    const idle = undefined;
+    Object.assign(this, {
+      cache: new Lru({ max: MAXIPNUM, maxAge: MAXNODEAGE }),
+      ...{ emit, idle, name: 'NETSCANNER', scanning: new Set() }
     });
-    // remove stale nodes from cache
-    const staleOffset = Date.now() - INTERVAL.stale; // calc stale offset
-    Scanner._cache.forEach((node, ip) => {
-      // check node for inactivity (!VEOK), drop from cache if stale
-      /// - must NOT be included in current (global) peerlist
-      /// - must NOT have lastVEOK timestamp within last 3 days
-      if (node.status !== Mochimo.VEOK) {
-        if (!current.has(ip) && node.lastVEOK < staleOffset) {
-          Scanner._cache.delete(ip);
+    // begin network scan (asynchronous)
+    this.init();
+    this.run();
+  }
+
+  cleanup () {
+    if (this._timeout) {
+      console.log(this.name, '//', 'clearing timeout...');
+      clearTimeout(this._timeout);
+      this._timeout = undefined;
+    }
+  }
+
+  getPeers (matchParams = {}) {
+    return this.cache.dump().reduce((acc, cur) => {
+      for (const param in matchParams) {
+        if (param in cur.v && cur.v[param] !== matchParams[param]) {
+          return acc;
         }
       }
+      acc.push(cur.v);
+      return acc;
+    }, []);
+  }
+
+  init () {
+    if (this.cache.size) {
+      console.log(this.name, '//', '(re)scan network cache...');
+    } else console.log(this.name, '//', 'begin network scan...');
+    // scan NODEIP and any cache
+    this.scan(NODEIP);
+    this.cache.keys().forEach(this.scan.bind(this));
+  }
+
+  run () {
+    // queue next this.run() to execute approx. every second
+    setTimeout(this.run.bind(this), 1000);
+    // init run
+    let netVEOK = 0;
+    const now = Date.now();
+    // (re)scan VEOK nodes and their respective peerlist
+    this.cache.keys().forEach((ip) => {
+      const node = this.cache.peek(ip);
+      if (node && node.status === Mochimo.VEOK) {
+        // assume network is OK
+        netVEOK++;
+        if (this.idle) {
+          console.warn(this.name, '//', 'communication restored!');
+          this.idle = undefined;
+        }
+        // check rescan
+        this.scan(ip);
+        if (Array.isArray(node.peers)) {
+          node.peers.forEach(this.scan.bind(this));
+        }
+      }
     });
-    // check for network communication loss
-    if (!current.size && !Scanner._timeidle) {
-      console.log('// NETWORK: communication loss detected!');
-      console.log('// performing scan on "recent" peers...');
-      Scanner._timeidle = Date.now(); // record timestamp of communication loss
-      Scanner._recent.forEach(Scanner.scan);
-    } else if (current.size) { // assume network ok
-      Scanner._timeidle = undefined;
-      current.forEach(Scanner.scan);
-    } else { // assume ongoing network communications loss
-      const idleTime = now - Scanner._timeidle;
-      const idleOffset = now - INTERVAL.idle; // calc idle offset
-      if (idleTime > idleOffset) {
-        console.log('// NETWORK: ongoing communication loss!');
-        console.log('// performing network re-initialization...');
-        Scanner._timeidle = 0; // reset idle time
-        Scanner.init(); // asynchronous
+    // check network status
+    if (!netVEOK) {
+      // check idle timer
+      if (!this.idle) {
+        console.warn(this.name, '//', 'communication loss detected!');
+        // record timestamp of communication loss
+        this.idle = Date.now();
+      } else {
+        // assume ongoing network communications loss
+        const idleTime = now - this.idle;
+        if (idleTime > MS30SECOND) {
+          this.idle = Date.now(); // reset idle time
+          console.error(this.name, '//', 'extended communication loss!');
+          console.error(this.name, '//', 'perform re-initialization...');
+          this.init();
+        }
       }
     }
-    // check for monitor update
-    const monitorOffset = now - INTERVAL.monitor; // calc monitor offset
-    if (Scanner._timemonitor < monitorOffset) {
-      Scanner._timemonitor = now;
-      console.log('Network State;',
-        Scanner._recent.size, 'recent,', current.size, 'current...');
+  }
+
+  scan (ip) {
+    // avoid duplicate scans
+    if (this.scanning.has(ip)) return;
+    // add 1 second delay scans exceeding maximum
+    if (this.scanning.size >= MAXSCAN) {
+      return setTimeout(this.scan.bind(this, ip), 1000);
     }
-  },
-  scan: async (ip) => {
-    // add ip to _scanning, or bail to avoid overlapping requests
-    if (Scanner._scanning.has(ip)) return; else Scanner._scanning.add(ip);
-    // obtain relative offsets and previous node state
+    // register asynchronous scan
+    this.scanning.add(ip);
+    this.scanNode(ip).catch((error) => {
+      console.trace(this.name, '// SCAN', error);
+    }).finally(() => this.scanning.delete(ip));
+  }
+
+  async scanNode (ip) {
+    // obtain time and cached node state (if any)
     const now = Date.now();
-    const updateOffset = now - INTERVAL.update; // calc update offset
-    const hostOffset = now - INTERVAL.host; // calc host offset
-    const cachedNode = Scanner._cache.get(ip) || {};
+    const cached = this.cache.get(ip) || { timestamp: 0, uptimestamp: 0 };
     // check for outdated node state
-    if (!cachedNode.timestamp || cachedNode.timestamp < updateOffset) {
+    if (!cached.timestamp || cached.timestamp < (now - MS30SECOND)) {
       // build node options and perform peerlist request for latest state
       const nodeOptions = { ip, opcode: Mochimo.OP_GETIPL };
-      let node = await Mochimo.Node.callserver(nodeOptions);
-      // merge node results with cachedNode state
-      node = { ...cachedNode, ...node.toJSON() };
-      // update node uptimestamp and lastVEOK
-      if (!node.uptimestamp) node.uptimestamp = -1;
-      if (!node.lastVEOK) node.lastVEOK = -1;
+      let node = (await Mochimo.Node.callserver(nodeOptions)).toJSON();
+      // if node is VEOK refresh uptimestamp...
       if (node.status === Mochimo.VEOK) {
-        if (node.uptimestamp < 0) node.uptimestamp = node.timestamp;
-        node.lastVEOK = node.timestamp;
-      } else node.uptimestamp = -1;
-      // check for outdated host data on cached state
-      if (process.env.IPINFO) { // ... only if IPINFO token available
-        if (!node.host) node.host = { timestamp: -1 };
-        if (node.host.timestamp < hostOffset) {
-          // build host data request source
-          const host = await readWeb('https://ipinfo.io/' + ip + IPINFOQuery);
-          // apply host data to node or report error with host data
-          if (typeof host === 'object') {
-            node.host = { port: node.port, ...host, timestamp: now };
-          } else console.error('// ERROR: data from IPINFO was not json');
+        if (!cached.uptimestamp) node.uptimestamp = node.timestamp;
+        if (IPINFOTOKEN) {
+          try { // ... and obtain IP info data
+            const info = await ipinfo.lookupIp(ip);
+            if (info.error) throw info.error;
+            node = { ...info, ...node };
+          } catch (error) {
+            console.trace(this.name, '// IPINFO', error);
+          }
+        }
+      } else node.uptimestamp = 0;
+      // update cached node object
+      Object.assign(cached, node);
+      // if VEOK and not in cache...
+      if (cached.status === Mochimo.VEOK && !this.cache.has(ip)) {
+        // ... add node to cache, and
+        if (!NetworkScanner.isPrivateIPv4(ip)) this.cache.set(ip, cached);
+        // ... extend scan to peers of valid node
+        if (Array.isArray(cached.peers)) {
+          cached.peers.forEach(this.scan.bind(this));
         }
       }
-      // update local cache with Object clone
-      Scanner._cache.set(ip, { ...node }); // note; node.host is referenced
-      // move connection stats to node.connection[region] object (prepended)
-      if (REGION) {
-        const { status, ping, baud, timestamp, uptimestamp } = node;
-        const conn = { status, ping, baud, timestamp, uptimestamp };
-        // place connection parameter after host parameter
-        node = { host: node.host, [`connection.${REGION}`]: conn, ...node };
+      // emit update to streams
+      if (typeof this.emit === 'function') {
+        this.emit(cached, 'network');
       }
-      // remove erroneous parameters before database update
-      delete node.lastVEOK; // not included in database
-      delete node.uptimestamp;
-      delete node.timestamp;
-      delete node.status;
-      delete node.ping;
-      delete node.baud;
-      delete node.port;
-      delete node.ip;
-      // add _id and filter BigInt
-      const _id = Db.util.id.network(ip);
-      node = { _id, ...Db.util.filterBigInt(node) };
-      try { // add atomimc operator $set and asynchronously update database
-        Db.update('network', { $set: node }, { _id }, { upsert: true });
-      } catch (error) { console.log(ip, 'database error;', error); }
     }
-    // remove ip from lock-list
-    Scanner._scanning.delete(ip);
+  }
+
+  static isPrivateIPv4 (ip) {
+    const b = new ArrayBuffer(4);
+    const c = new Uint8Array(b);
+    const dv = new DataView(b);
+    if (typeof ip === 'number') dv.setUint32(0, ip, true);
+    if (typeof ip === 'string') {
+      const a = ip.split('.');
+      for (let i = 0; i < 4; i++) dv.setUint8(i, a[i]);
+    }
+    if (c[0] === 0 || c[0] === 127 || c[0] === 10) return 1; // class A
+    if (c[0] === 172 && c[1] >= 16 && c[1] <= 31) return 2; // class
+    if (c[0] === 192 && c[1] === 168) return 3; // class C
+    if (c[0] === 169 && c[1] === 254) return 4; // auto
+    return 0; // public IP
   }
 };
-
-/* set cleanup signal traps */
-const cleanup = (e, src) => {
-  if (Scanner._timeout) {
-    console.log('// CLEANUP: terminating scanner timeout...');
-    clearTimeout(Scanner._timeout);
-  }
-  return informedShutdown(e, src);
-};
-process.on('SIGINT', cleanup);
-process.on('SIGTERM', cleanup);
-process.on('uncaughtException', console.trace);
-
-/* initialize watcher */
-Scanner.init().then(Scanner.run);
