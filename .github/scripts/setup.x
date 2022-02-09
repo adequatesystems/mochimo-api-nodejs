@@ -334,7 +334,9 @@ npm install && npm run pm2setup && npm run pm2startup
 # COMPLETE, final notes
 THISIP=$(hostname -I | awk '{print $1;}')
 echo
-echo "  The Mochimo API should now be ready!"
+echo "  ===================================="
+echo "  Mochimo API (Nodejs) Setup Complete!"
+echo "  ===================================="
 echo
 echo "  When your Mochimo Node finishes synchronizing,"
 echo "  you can expect results at:"
@@ -348,3 +350,4 @@ echo "  ... then add these files to the '.env' file:"
 echo "    echo 'SSLCERT=/etc/ssl/certs/mochimo-api.pem' >> .env"
 echo "    echo 'SSLKEY=/etc/ssl/private/mochimo-api.key' >> .env"
 echo "  ... and restart the API with: npm restart"
+echo
