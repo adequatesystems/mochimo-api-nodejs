@@ -64,7 +64,7 @@ curl -sL \
   | bash -
 
 # stop/disable default system apache service
-systemctl stop apache2 && systemctl disable apache
+systemctl stop apache2 && systemctl disable apache2
 # set hostname and update /etc/hosts
 if test -z "$SERVERHOST"; then hostname "$SERVERHOST"; fi
 echo "127.0.0.1 $(hostname)" >> /etc/hosts
@@ -316,9 +316,14 @@ git clone --single-branch \
   https://github.com/adequatesystems/mochimo-api-nodejs ~/mochimo-api-nodejs
 cd ~/mochimo-api-nodejs && rm -f .env
 echo
-read -p "Please provide the password for 'mochimo@localhost': " DBPASS
+unset DBPASS
+PROMPT="Please provide the password for 'mochimo@localhost': "
+while IFS= read -p "$PROMPT" -r -s -n 1 char; do
+if [[ $char == $'\0' ]]; then break; fi; PROMPT='*'; DBPASS+="$char"; done
+unset PROMPT
 echo
 echo "DBPASS=$DBPASS" >> .env
+unset DBPASS
 if test "$ISCLUSTER" = "y"; then
   echo "DBPORT_RW=6446" >> .env
   echo "DBPORT_RO=6447" >> .env
@@ -331,7 +336,8 @@ THISIP=$(hostname -I | awk '{print $1;}')
 echo
 echo "  The Mochimo API should now be ready!"
 echo
-echo "  Try connecting with:"
+echo "  When your Mochimo Node finishes synchronizing,"
+echo "  you can expect results at:"
 echo "    http://$THISIP/block/"
 echo "    http://$THISIP/transaction/"
 echo
