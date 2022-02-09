@@ -158,14 +158,14 @@ server.enableRoute({
 });
 server.enableRoute({
   method: 'GET',
-  path: /^\/balance\/(?:delta|(tag|address)\/([0-9a-f]+))$/i,
+  path: /^\/balance(?:\/(delta)|(?:\/(delta))?(?:\/(tag|address)\/([0-9a-f]+)))(?:\/)?$/i,
   param: regexParams,
   hint: '[BaseURL]/balance/<delta||(<tag||address>/[addressParameter])>',
   hintCheck: /balance|ledger|delta|tag|address/gi,
-  handler: async (res, params) => {
-    if (params && ['tag', 'address'].includes(params)) {
+  handler: async (res, delta, delta2, type, address, search) => {
+    if (typeof delta === 'undefined') delta = delta2;
+    if (typeof delta === 'undefined') {
       // perform balance request
-      const [type, address] = params;
       const isTag = Boolean(type === 'tag');
       const typeStr = isTag ? 'tag' : 'wots+';
       let le = await mochimo.getBalance(process.env.FULLNODE, address, isTag);
@@ -181,8 +181,12 @@ server.enableRoute({
         : server.respond(res, { message: `${typeStr} not found in ledger...` });
     } else {
       // perform balance delta search
-      const options = { orderby: '`bnum` DESC' };
-      mysql.query('balance', options, params[0], (error, results) => {
+      if (type === 'tag' || type === 'address') {
+        if (search) search += `&${type}=${address}*`;
+        else search = `?${type}=${address}*`;
+      }
+      const options = { orderby: '`bnum` DESC', search };
+      mysql.query('balance', options, (error, results) => {
         if (error) server.respond(res, Server.InternalError(error), 500);
         else server.respond(res, { results }, 200);
       });
@@ -206,7 +210,7 @@ server.enableRoute({
 });
 server.enableRoute({
   method: 'GET',
-  path: /^\/network(?:\/(?:(active)||peers\/(active|push|start))?)?(?:\/(?:(?=\d+\.\d+\.\d+\.\d+)((?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.?){4}))?)?$/i,
+  path: /^\/network(?:\/(?:(active)|peers\/(active|push|start))?)?(?:\/(?:(?=\d+\.\d+\.\d+\.\d+)((?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.?){4}))?)?$/i,
   hint: '[BaseURL]/network[/active[/IPv4]||peers</active||push||start>]',
   hintCheck: /network|active|peers|push|start/gi,
   handler: (res, status, listType, ip) => {
@@ -261,12 +265,29 @@ server.enableRoute({
 });
 server.enableRoute({
   method: 'GET',
+  path: /^\/richlist(?:\/)?$/i,
+  param: regexParams,
+  hint: '[BaseURL]/richlist',
+  hintCheck: /richlist|rank|leaderboard/gi,
+  handler: async (res, search) => {
+    // perform richlist search
+    const options = { orderby: '`rank` ASC', search };
+    mysql.query('richlist', options, (error, results) => {
+      if (error) server.respond(res, Server.InternalError(error), 500);
+      else server.respond(res, { results }, 200);
+    });
+  }
+});
+server.enableRoute({
+  method: 'GET',
   path: /^\/transaction(?:\/([0-9a-f]+)?)?$/i,
   param: regexParams,
   hint: '[BaseURL]/transaction/[txid]?[searchParameter]=[searchValue]',
   hintCheck: /transaction/gi,
   handler: async (res, txid, search) => {
-    // perform balance delta search
+    // apply txid to search parameters
+    if (txid) search = (search ? search + '&' : '?') + `txid=${txid}*`;
+    // perform transaction search
     const options = { orderby: '`created` DESC', search };
     mysql.query('transaction', options, (error, results) => {
       if (error) server.respond(res, Server.InternalError(error), 500);
@@ -284,44 +305,12 @@ server.enableStream({
 /*
 server.enableRoute({
   method: 'GET',
-  path: /^\/block(?:\/(?:([0-9]+)|(0x[0-9a-f]+))?)?(?:\/([a-z0-9]+)?)?$/i,
-  param: /^[?]?(?:[0-9a-z]+(?:(?:<(?:>|=)?|>=?|=)[0-9a-z-.]+(?:$|&))?)+$/i,
-  hint: '[BaseURL]/block/[blockNumber]/[blockParameter]' +
-    '?[searchParameter]=[searchValue]',
-  hintCheck: /block|0x/gi,
-  handler: async (res, blockNumber, blockHex) => {
-    try {
-      const query = {}; // undefined blockNumber/blockHex will find latest
-      if (typeof blockNumber === 'undefined') blockNumber = blockHex;
-      if (typeof blockNumber !== 'undefined') {
-        // convert blockNumber parameter to Long number type from Big Integer
-        query.bnum = Db.util.long(BigInt(blockNumber));
-      }
-      // perform block query
-      let block = await Db.findOne('block', query);
-      const status = block ? 200 : 404;
-      if (!block) block = { message: `${blockNumber} could not be found...` };
-      // send successfull query or 404
-      return Responder._respond(res, block, status);
-    } catch (error) { Responder.unknownInternal(res, error); }
-  }
-});
-server.enableRoute({
-  method: 'GET',
   path: /^\/chain(?:\/(?:([0-9]+)|(0x[0-9a-f]+))?)?(?:\/([a-z0-9]+)?)?$/i,
   param: /^[?]?(?:[0-9a-z]+(?:(?:<(?:>|=)?|>=?|=)[0-9a-z-.]+(?:$|&))?)+$/i,
   hint: '[BaseURL]/chain/[chainNumber]/[chainParameter]' +
     '?[searchParameter]=[searchValue]',
   hintCheck: /chain|0x/gi,
   handler: 'chain'
-});
-server.enableRoute({
-  method: 'GET',
-  path: /^\/richlist(?:\/)?$/,
-  param: /^[?]?(?:[0-9a-z]+(?:(?:<(?:>|=)?|>=?|=)[0-9a-z-.]+(?:$|&))?)+$/i,
-  hint: '[BaseURL]/richlist?[searchParameter]=[searchValue]',
-  hintCheck: /richlist/gi,
-  handler: 'richlist'
 });
 */
 
