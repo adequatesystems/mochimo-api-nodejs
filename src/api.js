@@ -175,38 +175,67 @@ server.enableRoute({
 });
 server.enableRoute({
   method: 'GET',
-  path: /^\/balance(?:\/(delta)|(?:\/(delta))?(?:\/(tag|address)\/([0-9a-f]+)))(?:\/)?$/i,
+  path: /^\/balance\/neogen(?:\/(address|tag)\/([0-9a-f]+))?(?:\/)?$/i,
   param: regexParams,
-  hint: '[BaseURL]/balance/<delta||(<tag||address>/[addressParameter])>',
+  hint: '[BaseURL]/balance/neogen/[<address|tag>/<addressParameter>]',
+  hintCheck: /balance|neogen|delta|tag|address/gi,
+  handler: async (res, type, address, search) => {
+    // apply type and address to search parameters
+    if (['tag', 'address'].includes(type)) {
+      search = searchAppend(search, `${type}=${address}*`);
+    }
+    const options = { orderby: '`bnum` DESC', search };
+    mysql.query('balance', options, (error, results) => {
+      // process results depending on request
+      if (error) server.respond(res, Server.Error(error), 500);
+      else server.respond(res, { results }, 200);
+    });
+  }
+});
+server.enableRoute({
+  method: 'GET',
+  path: /^\/balance(?:\/(tag|address)\/([0-9a-f]+))(?:\/)?$/i,
+  hint: '[BaseURL]/balance/<tag|address>/<addressParameter>',
   hintCheck: /balance|ledger|delta|tag|address/gi,
-  handler: async (res, delta, delta2, type, address, search) => {
-    if (typeof delta === 'undefined') delta = delta2;
-    if (typeof delta === 'undefined') {
-      // perform balance request
-      const isTag = Boolean(type === 'tag');
-      const typeStr = isTag ? 'tag' : 'wots+';
-      let le = await mochimo.getBalance(process.env.FULLNODE, address, isTag);
-      if (le) { // deconstruct ledger entry and compute sha256 of address
-        const { address, balance, tag } = le;
-        const addressHash = createHash('sha256').update(address).digest('hex');
-        // reconstruct ledger entry with sha256
-        le = { address, addressHash, tag, balance };
-      }
-      // send successfull query or 404
-      return le
-        ? server.respond(res, le, 200)
-        : server.respond(res, { message: `${typeStr} not found in ledger...` });
-    } else {
-      // perform balance delta search
-      if (type === 'tag' || type === 'address') {
-        // apply type and address to search parameters
-        search = (search ? search + '&' : '?') + `${type}=${address}*`;
-      }
-      const options = { orderby: '`bnum` DESC', search };
-      mysql.query('balance', options, (error, results) => {
-        if (error) server.respond(res, Server.Error(error), 500);
-        else server.respond(res, { results }, 200);
+  handler: async (res, type, address) => {
+    // perform balance request
+    const isTag = Boolean(type === 'tag');
+    const typeStr = isTag ? 'tag' : 'wots+';
+    // get list of best peers to use for balance request
+    const peers = rwdShuffle(netscanner.getPeers({ status: mochimo.VEOK }));
+    const consensus = await new Promise((resolve) => {
+      let done = 0;
+      const results = [];
+      if (!peers.length) resolve(false);
+      peers.forEach((peer) => {
+        mochimo.getBalance(peer.ip, address, isTag).then((le) => {
+          const result = results.find((res) => res.le.balance === le.balance);
+          if (result && ++result.consensus >= 3) resolve(result.le);
+          else if (!result) {
+            results.push({
+              le: {
+                address: le.address,
+                addressHash: '',
+                tag: le.tag,
+                balance: le.balance
+              },
+              consensus: 0
+            });
+          }
+        }).catch((timeout) => { /* ignore */ }).finally(() => {
+          if (++done >= peers.length) {
+            if (!results.length) resolve(false);
+            else resolve({ warning: 'consensus low', ...results[0].le });
+          }
+        });
       });
+    });
+    if (!consensus) {
+      server.respond(res, { message: `${typeStr} not found in ledger...` });
+    } else {
+      consensus.addressHash = createHash('sha256')
+        .update(Buffer.from(consensus.address, 'hex')).digest('hex');
+      server.respond(res, consensus, 200);
     }
   }
 });
