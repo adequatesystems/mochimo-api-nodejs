@@ -277,10 +277,15 @@ class Server {
     } catch (error) { this.respond(res, Server.InternalError(error), 500); }
   }
 
+  static Error (error) {
+    // return internal error response object
+    return { message: `${error}`, timestamp: (new Date()).toISOString() };
+  }
+
   static InternalError (error) {
     // trace error
     console.trace(error);
     // return internal error response object
-    return { message: `${error}`, timestamp: (new Date()).toISOString() };
+    return Server.Error(error);
   }
 };

@@ -182,12 +182,12 @@ server.enableRoute({
     } else {
       // perform balance delta search
       if (type === 'tag' || type === 'address') {
-        if (search) search += `&${type}=${address}*`;
-        else search = `?${type}=${address}*`;
+        // apply type and address to search parameters
+        search = (search ? search + '&' : '?') + `${type}=${address}*`;
       }
       const options = { orderby: '`bnum` DESC', search };
       mysql.query('balance', options, (error, results) => {
-        if (error) server.respond(res, Server.InternalError(error), 500);
+        if (error) server.respond(res, Server.Error(error), 500);
         else server.respond(res, { results }, 200);
       });
     }
@@ -203,7 +203,7 @@ server.enableRoute({
     // perform block search
     const options = { orderby: '`created` DESC', search };
     mysql.query('block', options, (error, results) => {
-      if (error) server.respond(res, Server.InternalError(error), 500);
+      if (error) server.respond(res, Server.Error(error), 500);
       else server.respond(res, { results }, 200);
     });
   }
@@ -273,7 +273,7 @@ server.enableRoute({
     // perform richlist search
     const options = { orderby: '`rank` ASC', search };
     mysql.query('richlist', options, (error, results) => {
-      if (error) server.respond(res, Server.InternalError(error), 500);
+      if (error) server.respond(res, Server.Error(error), 500);
       else server.respond(res, { results }, 200);
     });
   }
@@ -290,7 +290,7 @@ server.enableRoute({
     // perform transaction search
     const options = { orderby: '`created` DESC', search };
     mysql.query('transaction', options, (error, results) => {
-      if (error) server.respond(res, Server.InternalError(error), 500);
+      if (error) server.respond(res, Server.Error(error), 500);
       else server.respond(res, { results }, 200);
     });
   }
