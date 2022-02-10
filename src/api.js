@@ -27,6 +27,20 @@ BigInt.prototype.toJSON = function () { return this.toString(); };
 console.log('\n// START: ' + __filename);
 
 const capitalize = (s) => s.length ? s[0].toUpperCase() + s.slice(1) : '';
+const searchAppend = (search, str) => (search ? search + '&' : '?') + str;
+const rwdShuffle = (array, maxItems = 16) => {
+  // in-place destructive shuffling algo, reverse widening deletion
+  let b = 0;
+  const bf = Math.floor(Math.cbrt(array.length)) || 1;
+  while (array.length > maxItems) {
+    const u = array.length - 1; // upper bound
+    const l = Math.max(0, u - ((b++) / bf)); // lower bound
+    const r = Math.floor(Math.random() * (u - l + 1) + l); // bound rng
+    array.splice(r, 1); // remove selected index
+  }
+  // return array for convenience
+  return array;
+};
 
 /* regex */
 const regexParams = /^[?]?(?:[0-9a-z]+(?:(?:<>|<=|>=|<|>|=)[0-9a-z-.*]+)?[&|]?)*$/i;
