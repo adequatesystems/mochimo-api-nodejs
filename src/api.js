@@ -74,6 +74,7 @@ const mysql = {
   }),
   query: (table, options, callback) => {
     let { limit, offset, orderby, search, select } = options;
+    let nConditions = 0;
     let where = '';
     // consume search and place in `where`
     while (search) {
@@ -109,8 +110,10 @@ const mysql = {
                   else if (comparitor === '=') comparitor = 'LIKE';
                 }
                 // apply condition extension and modified condition
-                if (search.charAt(0) === '&') where += ' AND ';
-                if (search.charAt(0) === '|') where += ' OR ';
+                if (nConditions++) {
+                  if (search.charAt(0) === '&') where += ' AND ';
+                  if (search.charAt(0) === '|') where += ' OR ';
+                }
                 where += `\`${column}\` ${comparitor} '${value}'`;
             }
           }
