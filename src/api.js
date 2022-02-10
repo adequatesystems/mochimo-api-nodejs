@@ -129,8 +129,8 @@ const mysql = {
       from \`${table}\`
       ${where ? `WHERE ${where}` : ''}
       ${orderby ? `ORDER BY ${orderby}` : ''}
-      ${offset ? `OFFSET ${offset}` : ''}
       ${limit ? `LIMIT ${limit}` : 'LIMIT 10'}
+      ${offset ? `OFFSET ${offset}` : ''}
     `, callback);
   }
 };
