@@ -47,6 +47,7 @@ const regexParams = /^[?]?(?:[0-9a-z]+(?:(?:<>|<=|>=|<|>|=)[0-9a-z-.*]+)?[&|]?)*
 const regexKeyValue = /^([0-9a-z]+)(?:(<>|<=|>=|<|>|=)([0-9a-z-.*]+))?$/i;
 
 /* modules and utilities */
+const { blockReward, projectedSupply, round } = require('./apiUtils');
 const Server = require('./server');
 const BlkScanner = require('./scannerblk');
 const MemScanner = require('./scannermem');
@@ -394,33 +395,13 @@ server.enableRoute({
     if (status === 'active' || listType) peerOptions.status = mochimo.VEOK;
     if (ip) peerOptions.ip = ip;
     let results = netscanner.getPeers(peerOptions);
-    // sort peers by weight, then uptime
-    results.sort((a, b) => {
-      const aWeight = BigInt(`0x0${a.weight}`);
-      const bWeight = BigInt(`0x0${b.weight}`);
-      if (aWeight < bWeight) return 1;
-      if (aWeight > bWeight) return -1;
-      const aUptime = a.uptimestamp ? a.timestamp - a.uptimestamp : 0;
-      const bUptime = b.uptimestamp ? b.timestamp - b.uptimestamp : 0;
-      return bUptime - aUptime;
-    });
     // handle results appropriately
     if (listType) {
       if (listType === 'push') {
         results = results.filter((peer) => peer.cbits & mochimo.C_PUSH);
       }
       const found = results.length;
-      if (listType !== 'active' && results.length) {
-        // perform a reverse widening deletion until list size is reached
-        let b = 0;
-        const bf = Math.floor(Math.cbrt(results.length)) || 1;
-        while (results.length > 16) {
-          const u = results.length - 1; // upper bound
-          const l = Math.max(0, u - ((b++) / bf)); // lower bound
-          const r = Math.floor(Math.random() * (u - l + 1) + l); // bound rng
-          results.splice(r, 1); // remove selected index
-        }
-      }
+      if (listType !== 'active' && results.length) rwdShuffle(results);
       // build peerlist content
       let content = `# Mochimo ${capitalize(listType)} Peerlist, `;
       content += `built on ${new Date()}\n# Build; `;
@@ -477,17 +458,6 @@ server.enableStream({
   hint: '[BaseURL]/stream<?streamTypes>',
   hintCheck: /stream|block|network|transaction/gi
 }, ['block', 'network', 'transaction']);
-/*
-server.enableRoute({
-  method: 'GET',
-  path: /^\/chain(?:\/(?:([0-9]+)|(0x[0-9a-f]+))?)?(?:\/([a-z0-9]+)?)?$/i,
-  param: /^[?]?(?:[0-9a-z]+(?:(?:<(?:>|=)?|>=?|=)[0-9a-z-.]+(?:$|&))?)+$/i,
-  hint: '[BaseURL]/chain/[chainNumber]/[chainParameter]' +
-    '?[searchParameter]=[searchValue]',
-  hintCheck: /chain|0x/gi,
-  handler: 'chain'
-});
-*/
 
 /* initialize cleanup crew */
 const cleanup = (e, src) => {
