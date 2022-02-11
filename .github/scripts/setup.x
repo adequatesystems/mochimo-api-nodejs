@@ -155,7 +155,7 @@ shell.connect({
   user: 'icadmin',
   password: clustAdminPassword,
   host: 'localhost',
-  port 3306
+  port: 3306
 });
 print('Creating cluster...\n');
 dba.createCluster('InnoDBCluster');
@@ -168,7 +168,7 @@ shell.connect({
   user: 'icadmin',
   password: clustAdminPassword,
   host: 'localhost',
-  port 3306
+  port: 3306
 });
 print('Adding instance to cluster...\n');
 dba.getCluster().addInstance('icadmin@$PRIMARYIP:3306', {
