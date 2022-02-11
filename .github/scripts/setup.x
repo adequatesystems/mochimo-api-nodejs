@@ -116,7 +116,6 @@ let clusterAdminPassword, confirmPassword, password;
 const clusterAdmin = "'icadmin'@'%'";
 const interactive = false;
 const restart = true;
-const sess;
 
 do {
   password = getPassword(
