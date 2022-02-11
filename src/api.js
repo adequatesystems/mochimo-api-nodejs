@@ -246,11 +246,140 @@ server.enableRoute({
   hint: '[BaseURL]/block/[bnum]/[blockParam]',
   hintCheck: /block|bc/gi,
   handler: async (res, bnum, bparam, search) => {
+    const validParams = [
+      'created', 'started', 'type', 'size', 'difficulty', 'bnum',
+      'bhash', 'phash', 'mroot', 'nonce', 'maddr', 'mreward',
+      'mfee', 'amount', 'tcount', 'lcount'
+    ];
+    if (bparam) {
+      if (!validParams.includes(bparam)) {
+        return server.respond(res, {
+          message: `The block data does not contain '${bparam}'...`
+        });
+      }
+    }
+    // apply bnum to search
+    if (bnum) search = searchAppend(search, `bnum=${Number(bnum)}`);
     // perform block search
-    const options = { orderby: '`created` DESC', search };
+    const options = { orderby: '`bnum` DESC', search };
     mysql.query('block', options, (error, results) => {
       if (error) server.respond(res, Server.Error(error), 500);
-      else server.respond(res, { results }, 200);
+      else {
+        if (bparam) server.respond(res, results[0][bparam], 200);
+        else server.respond(res, { results }, 200);
+      }
+    });
+  }
+});
+server.enableRoute({
+  method: 'GET',
+  path: /^\/chain(?:\/([0-9]+|0x[0-9a-f]+)?)?(?:\/([a-z]+\/?)?)?$/i,
+  hint: '[BaseURL]/chain/[bnum]/[chainParam]',
+  hintCheck: /chain|bc/gi,
+  handler: async (res, bnum, cparam) => {
+    const validParams = [
+      'circsupply', 'totalsupply', 'maxsupply', 'bhash', 'phash', 'mroot',
+      'nonce', 'haiku', 'bnum', 'mfee', 'time0', 'stime', 'blocktime',
+      'blocktime_avg', 'tcount', 'tcount_avg', 'tcountpsec',
+      'tcountpsec_avg', 'txfees', 'reward', 'mreward', 'difficulty',
+      'difficulty_avg', 'hashrate', 'hashrate_avg', 'pseudorate_avg'
+    ];
+    if (cparam) {
+      if (!validParams.includes(cparam)) {
+        return server.respond(res, {
+          message: `The chain data does not contain '${cparam}'...`
+        });
+      }
+    }
+    // apply bnum to search
+    let search = '';
+    if (bnum) search = searchAppend(search, `bnum<=${Number(bnum)}`);
+    // perform initial block search
+    const options = { limit: 768, orderby: '`bnum` DESC', search };
+    mysql.query('block', options, (error, results) => {
+      if (error) server.respond(res, Server.Error(error), 500);
+      else if (!results.length) {
+        server.respond(res, { message: 'Blocks not yet available...' });
+      } else {
+        bnum = results[0].bnum;
+        // deconstruct trailers and perform chain calculations
+        let lostsupply, totalsupply, circsupply;
+        let rewards = 0n;
+        let pseudorate = 0;
+        let nonNeogenesis = 0;
+        let transactions = 0;
+        let blockTimes = 0;
+        let hashesTimes = 0;
+        let hashes = 0;
+        let difficulties = 0;
+        let phash;
+        for (let i = 0; i < results.length; i++) {
+          if (phash && phash !== results[i].bhash) continue;
+          phash = results[i].phash;
+          if (results[i].type !== mochimo.Block.NEOGENESIS) {
+            const { difficulty, created, started } = results[i];
+            // process chain data for non-(NEO)GENSIS block types
+            const stime = Number(new Date(created)) / 1000 | 0;
+            const time0 = Number(new Date(started)) / 1000 | 0;
+            const dT = stime - time0;
+            difficulties += difficulty;
+            blockTimes += dT;
+            nonNeogenesis++;
+            if (results[i].type === mochimo.Block.NORMAL) {
+              const { mfee, tcount } = results[i];
+              // process chain data for NORMAL block types
+              transactions += Number(tcount);
+              hashesTimes += dT;
+              hashes += Math.pow(2, difficulty);
+              rewards += blockReward(results[i].bnum) + (BigInt(mfee) * BigInt(tcount));
+            } else pseudorate++; // count PSEUDO block types
+          } else if (!totalsupply) {
+            // process first (ONLY) (NEO)GENSIS block type
+            totalsupply = BigInt(results[i].amount) + rewards;
+            // calculate lost supply and subtract from max supply
+            lostsupply = projectedSupply(results[i].bnum) - totalsupply;
+            circsupply = projectedSupply(results[i].bnum, 1) - lostsupply;
+          }
+        }
+        const isNeogenesis = results[0].type === mochimo.Block.NEOGENESIS;
+        const isNormal = results[0].type === mochimo.Block.NORMAL;
+        const blocktime = (((new Date(results[0].created)) -
+          (new Date(results[0].started))) / 1000) | 0;
+        const hashrate = round(Math.pow(2, results[0].difficulty) / blocktime);
+        // reconstruct chain data
+        const block = results[0];
+        const chain = {
+          created: block.created,
+          started: block.started,
+          bhash: block.bhash,
+          phash: block.phash,
+          mroot: block.mroot,
+          nonce: block.nonce,
+          haiku: block.nonce ? mochimo.Trigg.expand(block.nonce) : null,
+          bnum: block.bnum,
+          blocktime: blocktime,
+          blocktime_avg: round(blockTimes / nonNeogenesis),
+          difficulty: block.difficulty,
+          difficulty_avg: round(difficulties / nonNeogenesis),
+          hashrate: isNormal ? hashrate : null,
+          hashrate_avg: round(hashes / hashesTimes),
+          pseudorate_avg: round(pseudorate / nonNeogenesis),
+          tcount: block.tcount,
+          tcount_avg: round(transactions / nonNeogenesis),
+          tcountpsec: isNeogenesis ? null : round(block.tcount / blocktime),
+          tcountpsec_avg: round(transactions / blockTimes),
+          mfee: block.mfee,
+          txfees: (block.tcount * block.mfee) / 1e+9,
+          reward: isNeogenesis ? null : Number(blockReward(bnum)) / 1e+9,
+          mreward: ((block.tcount * block.mfee) / 1e+9) +
+            (isNeogenesis ? null : Number(blockReward(bnum)) / 1e+9),
+          circsupply: Number(circsupply) / 1e+9,
+          totalsupply: Number(totalsupply) / 1e+9,
+          maxsupply: Number(projectedSupply()) / 1e+9
+        };
+        if (cparam) server.respond(res, chain[cparam], 200);
+        else server.respond(res, chain, 200);
+      }
     });
   }
 });
