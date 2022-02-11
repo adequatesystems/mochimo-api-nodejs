@@ -5,6 +5,18 @@
   echo "  Mochimo API (Nodejs) Setup"
   echo "  =========================="
   echo
+
+if test -d "~/mochimap-api-nodejs"; then
+  echo "  Existing API (nodejs) installation detected..."
+  echo "  Performing an update of installed Mochimo API (Nodejs)"
+  echo
+  cd ~/mochimo-api-nodejs && git pull
+  npm stop && npm install && npm start
+  echo
+  echo "  Mochimo API (Nodejs) update complete!"
+  echo
+fi
+
   echo "  The Mochimo API requires MySQL to store Blockchain data."
   echo
   echo "  MySQL InnoDB Cluster is a high availability solution for MySQL."
@@ -12,7 +24,7 @@
   echo "  It is recommended ONLY for multi server configurations."
   echo
 while test -z "$ISCLUSTER"; do
-  read -p 'Would you like to use MySQL InnoDB Cluster? (y|n): ' ISCLUSTER
+  read -p 'Setup a cluster over multiple servers? (y|n): ' ISCLUSTER
 done
 if test "$ISCLUSTER" = "y"; then
   while test -z "$ISPRIMARY"; do
@@ -20,7 +32,7 @@ if test "$ISCLUSTER" = "y"; then
   done
   if test "$ISPRIMARY" = "n"; then
     while test -z "$PRIMARYIP"; do
-      read -p 'What is the IPv4 address of the primary instance? ' PRIMARYIP
+      read -p 'What is the address of the primary instance? ' PRIMARYIP
     done
   fi
 fi
