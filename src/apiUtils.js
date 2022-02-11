@@ -25,6 +25,7 @@ const asUint64String = (bigint) => {
 };
 
 const blockReward = (bnum) => {
+  bnum = BigInt(bnum);
   // 'delta' reward adjustments, 'base' rewards & 'trigger' blocks
   const delta = [56000n, 150000n, 28488n];
   const base = [5000000000n, 5917392000n, 59523942000n];
@@ -69,7 +70,7 @@ const projectedSupply = (bnum, exclLocked) => {
     return n * (blockReward(b1) + blockReward(bn)) / 2n;
   }; // Sum of an Arithmetic Sequence; Sn = n(A1+An)/2
   // without input, project maximum supply at block 0x200000
-  bnum = bnum || 2097152n;
+  bnum = bnum ? BigInt(bnum) : 2097152n;
   // Due to hard fork @ 0x4321, formula is split into 3 separate calculations
   let allblocks = 0n;
   let neogen = 0n;
@@ -123,12 +124,7 @@ module.exports = {
   asUint64String,
   blockReward,
   capitalize,
-  checkRequest,
   compareWeight,
-  fidFormat,
-  informedShutdown,
-  isPrivateIPv4,
-  ms,
   objectIsEmpty,
   projectedSupply,
   readWeb,
