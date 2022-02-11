@@ -116,6 +116,7 @@ let clusterAdminPassword, confirmPassword, password;
 const clusterAdmin = "'icadmin'@'%'";
 const interactive = false;
 const restart = true;
+const sess;
 
 do {
   password = getPassword(
@@ -143,15 +144,35 @@ dba.configureInstance('root@localhost:3306', {
   clusterAdmin, clusterAdminPassword, password, interactive, restart
 });
 
+print('  ... waiting for database to restart ...\n\n');
+os.sleep(5);
+
 EOF
   if test "$ISPRIMARY" = "y"; then
     cat <<EOF >>configure-mysql.js
+
+print('(re)Connecting to \'icadmin@localhost:3306\'...\n');
+shell.connect({
+  user: 'icadmin',
+  password: clustAdminPassword,
+  host: 'localhost',
+  port 3306
+});
+print('Creating cluster...\n');
 dba.createCluster('InnoDBCluster');
 
 EOF
   else
     cat <<EOF >>configure-mysql.js
-cluster.addInstance('icadmin@$PRIMARYIP:3306', {
+print('Connecting to \'icadmin@$PRIMARYIP:3306\'...\n');
+shell.connect({
+  user: 'icadmin',
+  password: clustAdminPassword,
+  host: 'localhost',
+  port 3306
+});
+print('Adding instance to cluster...\n');
+dba.getCluster().addInstance('icadmin@$PRIMARYIP:3306', {
   password: clusterAdminPassword, interactive
 });
 
