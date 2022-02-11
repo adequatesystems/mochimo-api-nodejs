@@ -153,7 +153,7 @@ EOF
 print('(re)Connecting to \'icadmin@localhost:3306\'...\n');
 shell.connect({
   user: 'icadmin',
-  password: clustAdminPassword,
+  password: clusterAdminPassword,
   host: 'localhost',
   port: 3306
 });
@@ -166,7 +166,7 @@ EOF
 print('Connecting to \'icadmin@$PRIMARYIP:3306\'...\n');
 shell.connect({
   user: 'icadmin',
-  password: clustAdminPassword,
+  password: clusterAdminPassword,
   host: 'localhost',
   port: 3306
 });
