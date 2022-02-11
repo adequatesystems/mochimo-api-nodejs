@@ -6,7 +6,7 @@
   echo "  =========================="
   echo
 
-if test -d "~/mochimap-api-nodejs"; then
+if test -d "~/mochimo-api-nodejs"; then
   echo "  Existing API (nodejs) installation detected..."
   echo "  Performing an update of installed Mochimo API (Nodejs)"
   echo
@@ -98,7 +98,7 @@ print('\n');
 print('  MySQL InnoDB Cluster Configuration\n');
 print('  ==================================\n\n');
 print('  - create cluster admin user; icadmin\n');
-print('    *NOTE: icadmin must have the same password on all instances');
+print('    *NOTE: icadmin must have the same password on all instances\n');
 print('  - configure/create cluster; InnoDBCluster\n');
 print('  - create database; mochimo\n');
 print('  - create balance delta table; mochimo.balance\n');
