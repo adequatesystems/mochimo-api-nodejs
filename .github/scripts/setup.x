@@ -15,6 +15,7 @@ if test -d "~/mochimap-api-nodejs"; then
   echo
   echo "  Mochimo API (Nodejs) update complete!"
   echo
+  exit
 fi
 
   echo "  The Mochimo API requires MySQL to store Blockchain data."
