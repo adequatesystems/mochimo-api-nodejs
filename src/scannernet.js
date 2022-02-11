@@ -68,8 +68,8 @@ class NetworkScanner {
     }
   }
 
-  getPeers (matchParams = {}) {
-    return this.cache.dump().reduce((acc, cur) => {
+  getPeers (matchParams = {}, orderby = 'best') {
+    const peers = this.cache.dump().reduce((acc, cur) => {
       for (const param in matchParams) {
         if (param in cur.v && cur.v[param] !== matchParams[param]) {
           return acc;
@@ -78,6 +78,24 @@ class NetworkScanner {
       acc.push(cur.v);
       return acc;
     }, []);
+    switch (orderby) {
+      case 'ip':
+        // sort peers (in-place) by ip string
+        peers.sort((a, b) => ('' + a.ip).localeCompare(b.ip));
+        break;
+      default:
+        // sort peers (in-place) by weight, then uptime
+        peers.sort((a, b) => {
+          const aWeight = BigInt(`0x0${a.weight}`);
+          const bWeight = BigInt(`0x0${b.weight}`);
+          if (aWeight < bWeight) return 1;
+          if (aWeight > bWeight) return -1;
+          const aUptime = a.uptimestamp ? a.timestamp - a.uptimestamp : 0;
+          const bUptime = b.uptimestamp ? b.timestamp - b.uptimestamp : 0;
+          return bUptime - aUptime;
+        });
+    }
+    return peers;
   }
 
   init () {
