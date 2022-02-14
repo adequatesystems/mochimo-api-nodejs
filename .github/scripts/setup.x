@@ -33,25 +33,25 @@ mysql_secure_installation
 # install Mochimo API components, env vars and dependencies
 git clone --single-branch \
   https://github.com/adequatesystems/mochimo-api-nodejs ~/mochimo-api-nodejs
-cd ~/mochimo-api-nodejs &&
 
 # configure database tables and mochimo user
-mysqlsh -f ./github/scripts/configure-mysql.js
+mysqlsh -f ~/mochimo-api-nodejs/.github/scripts/configure-mysql.js
 
 # (re)Install environment variables
-rm -f .env
+rm -f ~/mochimo-api-nodejs/.env
 echo
 echo "  Please enter your Mochimo API (Nodejs) environment variables..."
 echo "    (or press enter to leave blank)"
 read -p 'IPInfo.io Access Token: ' IPINFOTOKEN
-echo "IPINFOTOKEN=$IPINFOTOKEN" >> .env
+echo "IPINFOTOKEN=$IPINFOTOKEN" >> ~/mochimo-api-nodejs/.env
 unset IPINFOTOKEN
 read -s -p "MySQL password for 'mochimo@localhost': " DBPASS
-echo "DBPASS=$DBPASS" >> .env
+echo "DBPASS=$DBPASS" >> ~/mochimo-api-nodejs/.env
 unset DBPASS
 
 # Install dependencies and setup pm2 startup
-npm install && npm run pm2setup && npm run pm2startup
+cd ~/mochimo-api-nodejs/ && \
+  npm install && npm run pm2setup && npm run pm2startup
 
 echo
 echo "  ===================================="
