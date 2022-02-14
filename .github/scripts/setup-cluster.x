@@ -57,7 +57,6 @@ EOF
 systemctl daemon-reload
 systemctl enable mysqlrouter.service
 systemctl restart mysqlrouter.service
-fi
 
 # update environment vars with router ports
 echo "DBPORT_RW=6446" >> .env
