@@ -64,7 +64,7 @@ echo "DBPORT_RW=6446" >> .env
 echo "DBPORT_RO=6447" >> .env
 
 # restart api
-npm install && npm run pm2startup
+npm install && npm restart
 
 echo
 echo "  ========================================"

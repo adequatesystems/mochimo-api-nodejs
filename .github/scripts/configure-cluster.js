@@ -10,7 +10,8 @@ print('  InnoDBCluster Setup Configuration\n');
 print('  =================================\n\n');
 
 let clusterAdminPassword, confirmPassword, password;
-const clusterAdmin = "'icadmin'@'%'";
+const clusterAdminHost = "'icadmin'@'%'";
+const clusterAdmin = 'icadmin';
 const interactive = false;
 const restart = true;
 
@@ -27,9 +28,9 @@ print('Shell connected successfully\n\n');
 
 do {
   clusterAdminPassword = getPassword(
-    "Please provide a new password for 'icadmin@localhost': ");
+    `Please provide a new password for ${clusterAdminHost}: `);
   confirmPassword = getPassword(
-    "Please confirm the password for 'icadmin@localhost': ");
+    `Please confirm the password for ${clusterAdminHost}: `);
   if (clusterAdminPassword !== confirmPassword) {
     print('Passwords do not match.\n\n');
   }
@@ -37,20 +38,23 @@ do {
 print('Password accepted\n\n');
 
 dba.configureInstance('root@localhost:3306', {
-  clusterAdmin, clusterAdminPassword, password, interactive, restart
+  clusterAdminHost, clusterAdminPassword, password, interactive, restart
 });
 
 print('  Waiting for database to restart...\n');
 do {
   try {
     shell.connect({
-      user: 'icadmin', password: clusterAdminPassword, host: 'localhost'
+      user: clusterAdmin, password: clusterAdminPassword, host: 'localhost'
     });
   } catch (error) {
     os.sleep(2);
   }
 } while (!shell.getSession());
 print('Restart complete!\n\n');
+
+// create the cluster
+dba.createCluster('InnoDbCluster');
 
 // get hostname (as specified by system) and place in allowedlist
 shell.getSession()
