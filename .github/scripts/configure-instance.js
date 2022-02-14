@@ -10,8 +10,8 @@ print('  InnoDBCluster Instance Configuration\n');
 print('  ====================================\n\n');
 
 let clusterAdminPassword, confirmPassword, password;
-const clusterAdminHost = "'icadmin'@'%'";
-const clusterAdmin = 'icadmin';
+const clusterAdmin = "'icadmin'@'%'";
+const adminUser = 'icadmin';
 const interactive = false;
 const restart = true;
 
@@ -34,9 +34,9 @@ const clusterHost = shell.prompt('Please enter the address of the cluster: ');
 
 do {
   clusterAdminPassword = getPassword(
-    `Please provide the password for '${clusterAdmin}@${clusterHost}': `);
+    `Please provide the password for ${clusterAdmin}: `);
   confirmPassword = getPassword(
-    `Please confirm the password for '${clusterAdmin}@${clusterHost}': `);
+    `Please confirm the password for ${clusterAdmin}: `);
   if (clusterAdminPassword !== confirmPassword) {
     print('Passwords do not match.\n\n');
   }
@@ -44,14 +44,14 @@ do {
 print('Password accepted\n\n');
 
 dba.configureInstance('root@localhost:3306', {
-  clusterAdminHost, clusterAdminPassword, password, interactive, restart
+  clusterAdmin, clusterAdminPassword, password, interactive, restart
 });
 
 print('  Waiting for database to restart...\n');
 do {
   try {
     shell.connect({
-      user: 'icadmin', password: clusterAdminPassword, host: 'localhost'
+      user: adminUser, password: clusterAdminPassword, host: 'localhost'
     });
   } catch (error) {
     os.sleep(2);
@@ -61,7 +61,7 @@ print('Restart complete!\n\n');
 
 print('Connecting to cluster...');
 shell.connect({
-  user: clusterAdmin, password: clusterAdminPassword, host: clusterHost
+  user: adminUser, password: clusterAdminPassword, host: clusterHost
 });
 
 // obtain allowlist
@@ -81,7 +81,7 @@ while (updatelist.length) {
   print(`${server}... `);
   try {
     shell.connect({
-      user: clusterAdmin, password: clusterAdminPassword, host: server
+      user: adminUser, password: clusterAdminPassword, host: server
     }).runSql(`SET PERSIST group_replication_ip_allowlist='${allowlist}'`);
     print('updated\n');
   } catch (error) {
@@ -92,6 +92,6 @@ print('\n');
 
 print('Adding instance to cluster...');
 shell.connect({
-  user: clusterAdmin, password: clusterAdminPassword, host: clusterHost
+  user: adminUser, password: clusterAdminPassword, host: clusterHost
 });
-dba.getCluster().addInstance(`icadmin@${hostname}`);
+dba.getCluster().addInstance(`${adminUser}@${hostname}`);

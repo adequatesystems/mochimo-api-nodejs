@@ -95,9 +95,9 @@ shell.getSession().runSql(
 
 do {
   password = getPassword(
-    "Please provide a new password for 'mochimo@localhost': ");
+    "Please provide a new password for 'mochimo'@'%': ");
   confirmPassword = getPassword(
-    "Please confirm the password for 'mochimo@localhost': ");
+    "Please confirm the password for 'mochimo'@'%'': ");
   if (password !== confirmPassword) {
     print('Passwords do not match.\n\n');
   }

@@ -20,7 +20,7 @@ THISIP=$(hostname -I | awk '{print $1;}')
   echo "  cluster to /etc/hosts on THIS server before continuing."
   echo
   read -p 'Ctrl+C to Abort. Press enter to continue...'
-  echo -ne '\033[1A\033[K'
+  echo
   read -p 'Are you adding to an existing cluster? (y|n): ' CLUSTER
   echo
 

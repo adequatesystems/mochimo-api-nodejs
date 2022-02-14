@@ -40,14 +40,15 @@ mysqlsh -f ~/mochimo-api-nodejs/.github/scripts/configure-mysql.js
 # (re)Install environment variables
 rm -f ~/mochimo-api-nodejs/.env
 echo
-echo "  Please enter your Mochimo API (Nodejs) environment variables..."
-echo "    (or press enter to leave blank)"
-read -p 'IPInfo.io Access Token: ' IPINFOTOKEN
-echo "IPINFOTOKEN=$IPINFOTOKEN" >> ~/mochimo-api-nodejs/.env
-unset IPINFOTOKEN
+echo "  Please enter your Mochimo API env vars (as necessary)..."
+echo
 read -s -p "MySQL password for 'mochimo@localhost': " DBPASS
 echo "DBPASS=$DBPASS" >> ~/mochimo-api-nodejs/.env
 unset DBPASS
+read -p 'IPInfo.io Access Token: ' IPINFOTOKEN
+echo "IPINFOTOKEN=$IPINFOTOKEN" >> ~/mochimo-api-nodejs/.env
+unset IPINFOTOKEN
+echo
 
 # Install dependencies and setup pm2 startup
 cd ~/mochimo-api-nodejs/ && \
