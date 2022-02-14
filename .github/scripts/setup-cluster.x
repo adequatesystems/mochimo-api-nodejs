@@ -2,8 +2,8 @@
 
 # existing installation check
 cd ~/mochimo-api-nodejs || \
-  echo "  Error: no existing Mochimo API (Nodejs) installation" && \
-  echo "  Exiting..." && exit
+( echo "  Error: no existing Mochimo API (Nodejs) installation" && \
+  echo "  Exiting..." && exit )
 
 THISHOST=$(hostname -b)
 THISIP=$(hostname -I | awk '{print $1;}')
