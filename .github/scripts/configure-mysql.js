@@ -5,6 +5,10 @@ function getPassword (msg) {
   return shell.prompt(msg, { type: 'password' });
 }
 
+print('\n');
+print('  MySQL Database Configuration\n');
+print('  ============================\n\n');
+
 let confirmPassword, password;
 
 do {

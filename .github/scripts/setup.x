@@ -45,6 +45,7 @@ echo
 read -s -p "MySQL password for 'mochimo@localhost': " DBPASS
 echo "DBPASS=$DBPASS" >> ~/mochimo-api-nodejs/.env
 unset DBPASS
+echo
 read -p 'IPInfo.io Access Token: ' IPINFOTOKEN
 echo "IPINFOTOKEN=$IPINFOTOKEN" >> ~/mochimo-api-nodejs/.env
 unset IPINFOTOKEN
