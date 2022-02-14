@@ -9,36 +9,28 @@ print('\n');
 print('  InnoDBCluster Setup Configuration\n');
 print('  =================================\n\n');
 
-let clusterAdminPassword, confirmPassword, password;
+let confirm, password;
 const clusterAdmin = "'icadmin'@'%'";
 const adminUser = 'icadmin';
 const interactive = false;
 const restart = true;
 
 do {
-  password = getPassword(
-    "Please provide the password for 'root@localhost': ");
   try {
+    password = getPassword(
+      "Please provide the password for 'root@localhost': ");
+    confirm = getPassword(
+      "Please confirm the password for 'root@localhost': ");
+    if (password !== confirm) throw new Error('Passwords do not match');
     shell.connect({ user: 'root', password, host: 'localhost' });
   } catch (error) {
-    print(error.message + '\n\n');
+    print(`${error.message}\n\n`);
   }
 } while (!shell.getSession());
 print('Shell connected successfully\n\n');
 
-do {
-  clusterAdminPassword = getPassword(
-    `Please provide a new password for ${clusterAdmin}: `);
-  confirmPassword = getPassword(
-    `Please confirm the password for ${clusterAdmin}: `);
-  if (clusterAdminPassword !== confirmPassword) {
-    print('Passwords do not match.\n\n');
-  }
-} while (!clusterAdminPassword || clusterAdminPassword !== confirmPassword);
-print('Password accepted\n\n');
-
 dba.configureInstance('root@localhost:3306', {
-  clusterAdmin, clusterAdminPassword, password, interactive, restart
+  clusterAdmin, clusterAdminPassword: password, password, interactive, restart
 });
 
 shell.disconnect();
@@ -47,18 +39,15 @@ os.sleep(5);
 
 do {
   try {
-    shell.connect({
-      user: adminUser, password: clusterAdminPassword, host: 'localhost'
-    });
+    shell.connect({ user: adminUser, password, host: 'localhost' });
   } catch (error) {
-    os.sleep(1);
+    os.sleep(2);
   }
 } while (!shell.getSession());
 print('Restart complete!\n\n');
 
+// get hostname for ipAllowlist
+const ipAllowlist = shell.getSession()
+  .runSql('SELECT @@hostname').fetchOneObject()['@@hostname'];
 // create the cluster
-dba.createCluster('InnoDbCluster');
-
-// get hostname (as specified by system) and place in allowedlist
-shell.getSession()
-  .runSql('SET PERSIST group_replication_ip_allowlist=(SELECT @@hostname)');
+dba.createCluster('InnoDbCluster', { ipAllowlist });

@@ -36,13 +36,16 @@ apt install -y mysql-router
 # execute configuration script for cluster or instance
 if test "$CLUSTER" = "y"; then
   mysqlsh -f .github/scripts/configure-instance.js
-  mysqlrouter --user root --bootstrap icadmin@localhost:3306 \
-    --conf-use-sockets --account icrouter
 else
   mysqlsh -f .github/scripts/configure-cluster.js
-  mysqlrouter --user root --bootstrap icadmin@localhost:3306 \
-    --conf-use-sockets --account icrouter --account-create always
 fi
+
+echo "NOTE: MySQL password for 'icadmin' and 'root' are likely the same."
+echo "If you decide to change this, (re)run MySQL Router bootstrap with:"
+echo `mysqlrouter --bootstrap icadmin@localhost:3306 --conf-use-sockets --account icrouter`
+echo
+mysqlrouter --user root --bootstrap icadmin@localhost:3306 \
+  --conf-use-sockets --account icrouter
 
 # install mysqlrouter service
 cat <<EOF >/etc/systemd/system/mysqlrouter.service
