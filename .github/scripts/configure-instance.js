@@ -54,7 +54,7 @@ do {
       user: 'icadmin', password: clusterAdminPassword, host: 'localhost'
     });
   } catch (error) {
-    os.sleep(2000);
+    os.sleep(2);
   }
 } while (!shell.getSession());
 print('Restart complete!\n\n');
