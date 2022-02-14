@@ -20,10 +20,8 @@ THISIP=$(hostname -I | awk '{print $1;}')
   echo "  cluster to /etc/hosts on THIS server before continuing."
   echo
   read -p 'Ctrl+C to Abort. Press enter to continue...'
-  read -p 'Will this server be added to an existing cluster? (y|n):' REMOTE
-if test "$REMOTE" = "y"; then
-  read -p 'Please enter an address of the existing cluster:' REMOTEHOST
-fi
+  echo -ne '\033[1A\033[K'
+  read -p 'Are you adding to an existing cluster? (y|n): ' CLUSTER
   echo
 
 # ensure latest copy of repository
@@ -36,8 +34,7 @@ apt install -y mysql-router
   /etc/hosts || echo "127.0.0.1 localhost $THISHOST" >> /etc/hosts )
 
 # execute configuration script for cluster or instance
-if test "$REMOTE" = "y"; then
-  mysql -u root -p -e "SET PERSIST group_replication_ip_allowlist=$REMOTEHOST"
+if test "$CLUSTER" = "y"; then
   mysqlsh -f .github/scripts/configure-instance.js
   mysqlrouter --user root --bootstrap icadmin@localhost:3306 \
     --conf-use-sockets --account icrouter

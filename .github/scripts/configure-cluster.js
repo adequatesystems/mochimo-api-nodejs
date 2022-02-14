@@ -5,6 +5,10 @@ function getPassword (msg) {
   return shell.prompt(msg, { type: 'password' });
 }
 
+print('\n');
+print('  InnoDBCluster Setup Configuration\n');
+print('  =================================\n\n');
+
 let clusterAdminPassword, confirmPassword, password;
 const clusterAdmin = "'icadmin'@'%'";
 const interactive = false;
@@ -20,10 +24,6 @@ do {
   }
 } while (!shell.getSession());
 print('Shell connected successfully\n\n');
-
-// get hostname (as specified by system) and place in allowedlist
-shell.getSession()
-  .runSql('SET PERSIST group_replication_ip_allowlist=(SELECT @@hostname)');
 
 do {
   clusterAdminPassword = getPassword(
@@ -51,3 +51,7 @@ do {
   }
 } while (!shell.getSession());
 print('Restart complete!\n\n');
+
+// get hostname (as specified by system) and place in allowedlist
+shell.getSession()
+  .runSql('SET PERSIST group_replication_ip_allowlist=(SELECT @@hostname)');
