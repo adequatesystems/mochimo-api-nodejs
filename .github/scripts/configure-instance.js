@@ -47,7 +47,10 @@ dba.configureInstance('root@localhost:3306', {
   clusterAdmin, clusterAdminPassword, password, interactive, restart
 });
 
+shell.disconnect();
 print('  Waiting for database to restart...\n');
+os.sleep(5);
+
 do {
   try {
     shell.connect({
