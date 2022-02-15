@@ -98,6 +98,7 @@ class BlockScanner extends Watcher {
       await this.db.promise().query('INSERT INTO `block` SET ?', blockJSON);
       // emit to stream
       if (this.emit) this.emit(blockJSON, 'block');
+      // ======================
       // Transaction processing
       if (blockJSON.type === mochimo.Block.NORMAL) {
         // declare additional parameters for trasaction submissions
@@ -113,39 +114,59 @@ class BlockScanner extends Watcher {
             iferror.bind(this, '// transaction INSERT'));
         }
       }
+      // =================
       // Ledger processing
       if (blockJSON.type === mochimo.Block.GENESIS ||
           blockJSON.type === mochimo.Block.NEOGENESIS) {
-        // obtain previous neogenesis block data
+        let pngbhash = null;
         const pngaddr = {};
-        try {
-          if (bnum < 256n) throw new Error('No Neoegenesis before Genesis');
-          const pngfilepath = path.join(
-            this.target, `b${asUint64String(bnum - 256n)}.bc`);
-          // read previous neogen data
-          const pngdata = await fs.promises.readFile(pngfilepath);
-          // perform pre-checks on pngdata
-          if (pngdata.length % mochimo.LEntry.length !== 164) {
-            throw new Error(`${filepath} has invalid size: ${pngdata.length}`);
+        if (bnum > 255n) {
+          const pngbnum = bnum - 256n;
+          // trace chain back to previous neogenesis block hash
+          const blockResults = await this.db.promise().query(
+            'SELECT * FROM `block` WHERE `bnum` < ? AND `bnum` >= ?' +
+            ' ORDER BY `bnum` DESC', [bnum, pngbnum]);
+          let phash = blockJSON.phash;
+          for (let i = 0; i < blockResults.length; i++) {
+            if (blockResults[i].bhash !== phash) continue;
+            phash = blockResults[i].phash;
+            if (blockResults[i].bnum === pngbnum) {
+              pngbhash = blockResults.bhash;
+              break;
+            }
           }
-          // interpret blockdata as mochimo Block
-          const pngblock = new mochimo.Block(pngdata);
-          // perform block hash verification check
-          if (!pngblock.verifyBlockHash()) {
-            throw new Error(`${filepath} block hash could not be verified`);
+          // proceed only if hash was determined
+          if (pngbhash) {
+            // pull file data from archive
+            const pngfilename = farchive(pngbnum, pngbhash);
+            const pngfilepath = path.join(this.archivedir, pngfilename);
+            try {
+              // read previous neogen data
+              const pngdata = await fs.promises.readFile(pngfilepath);
+              // perform pre-checks on pngdata
+              if (pngdata.length % mochimo.LEntry.length !== 164) {
+                throw new Error(`${filepath} invalid size: ${pngdata.length}`);
+              }
+              // interpret blockdata as mochimo Block
+              const pngblock = new mochimo.Block(pngdata);
+              // perform block hash verification check
+              if (!pngblock.verifyBlockHash()) {
+                throw new Error(`${filepath} block hash could not be verified`);
+              }
+              // create list of previous address balances
+              for (const lentry of pngblock.ledger) {
+                let { address } = lentry;
+                const { balance, tag } = lentry;
+                const delta = -(balance);
+                const id = createHash('sha256').update(address).digest('hex');
+                address = address.slice(0, 64);
+                pngaddr[id] = { address, addressHash: id, tag, balance, delta };
+              }
+            } catch (pngError) {
+              // report error and continue
+              console.warn(this.name, '// Previous Neogenesis', pngError);
+            }
           }
-          // create list of previous address balances
-          for (const lentry of pngblock.ledger) {
-            let { address } = lentry;
-            const { balance, tag } = lentry;
-            const delta = -(balance);
-            const id = createHash('sha256').update(address).digest('hex');
-            address = address.slice(0, 64);
-            pngaddr[id] = { address, addressHash: id, tag, balance, delta };
-          }
-        } catch (pngError) {
-          // report error and continue
-          console.warn(this.name, '// Previous Neogenesis', pngError);
         }
         // build array of ledger entries, then rank (sort) by descending balance
         const ledger = block.ledger.map((lentry) => {
@@ -172,7 +193,13 @@ class BlockScanner extends Watcher {
           if (pbalance !== lentry.balance) {
             // determine delta and push change
             const delta = lentry.balance - pbalance;
-            this.db.query('INSERT INTO `balance` SET ?',
+            // INSERT balance changes
+            // ... if pnghash was determined, update on duplicate key
+            this.db.query(
+              pngbhash
+                ? 'INSERT INTO `balance` SET ? ON DUPLICATE KEY UPDATE ' +
+                '`balance` = VALUES(`balance`), `delta` = VALUES(`delta`)'
+                : 'INSERT INTO `balance` SET ?',
               { ...balananceAddDb, ...lentry, delta },
               iferror.bind(this, '// balance INSERT'));
           }
@@ -183,8 +210,13 @@ class BlockScanner extends Watcher {
         this.db.query('DELETE FROM `richlist` WHERE `rank` > ?', rank,
           iferror.bind(this, '// richlist DELETE'));
         // INSERT remaining pngaddr as emptied
+        // ... if pnghash was determined, update on duplicate key
         for (const id in pngaddr) {
-          this.db.query('INSERT INTO `balance` SET ?',
+          this.db.query(
+            pngbhash
+              ? 'INSERT INTO `balance` SET ? ON DUPLICATE KEY UPDATE ' +
+              '`balance` = VALUES(`balance`), `delta` = VALUES(`delta`)'
+              : 'INSERT INTO `balance` SET ?',
             { ...balananceAddDb, ...pngaddr[id], balance: 0n },
             iferror.bind(this, '// remaining balance INSERT'));
         }
