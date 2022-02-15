@@ -7,7 +7,7 @@
 /* global BigInt */
 const https = require('https');
 
-module.exports = {
+const Utils = {
   asUint64String: (bigint) => {
     return BigInt.asUintN(64, BigInt(bigint)).toString(16).padStart(16, '0');
   },
@@ -50,7 +50,7 @@ module.exports = {
     const Instamine = 4757066000000000n; // inclusive of any locked dev coins
     const BigIntMin = (...args) => args.reduce((m, e) => e < m ? e : m);
     const Sn = (n, b1, bn) => {
-      return n * (this.blockReward(b1) + this.blockReward(bn)) / 2n;
+      return n * (Utils.blockReward(b1) + Utils.blockReward(bn)) / 2n;
     }; // Sum of an Arithmetic Sequence; Sn = n(A1+An)/2
     // without input, project maximum supply at block 0x200000
     bnum = bnum ? BigInt(bnum) : 2097152n;
@@ -115,3 +115,5 @@ module.exports = {
   },
   searchAppend: (search, str) => (search ? search + '&' : '?') + str
 };
+
+module.exports = Utils;
