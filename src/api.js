@@ -44,8 +44,7 @@ const dbro = new DB({ ...dbopts, port: process.env.DBPORT_RO || dbopts.port });
 
 // create Server instance
 const server = new Server({
-  secure: Boolean(process.env.SSLCERT && process.env.SSLKEY),
-  sslCert: process.env.SSLCERT,
+  sslcert: process.env.SSLCERT,
   sslkey: process.env.SSLKEY
 });
 

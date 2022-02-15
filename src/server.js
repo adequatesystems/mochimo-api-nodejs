@@ -12,7 +12,7 @@ const fs = require('fs');
 /* Server */
 module.exports =
 class Server {
-  constructor ({ name, secure, sslkey, sslcert }) {
+  constructor ({ name, sslkey, sslcert }) {
     name = name || 'Server';
     // apply instance parameters
     Object.assign(this, {
@@ -23,7 +23,8 @@ class Server {
       routes: []
     });
     // initialize server
-    if (!this.secure) this.api = http.createServer();
+    const secure = Boolean(sslcert && sslkey);
+    if (!secure) this.api = http.createServer();
     else { // include ssl cert and key
       this.api = https.createServer({
         key: sslkey ? fs.readFileSync(sslkey) : null,
@@ -42,7 +43,7 @@ class Server {
       console.log(this.name, `// Listening on ${address}:${port}`);
     });
     // start http server
-    this.api.listen(this.secure ? 443 : 80, '0.0.0.0');
+    this.api.listen(secure ? 443 : 80, '0.0.0.0');
   }
 
   cleanup () {
