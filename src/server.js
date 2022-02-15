@@ -81,6 +81,24 @@ class Server {
     });
   }
 
+  stream (json, eventType) {
+    let connections;
+    if (eventType && eventType in this.eventConnections) {
+      connections = this.eventConnections[eventType];
+    } else connections = this.connections;
+    // build stream messge
+    const id = new Date().toISOString();
+    // for empty broadcasts (heartbeats), simply send the id in a comment
+    if (!json) return connections.forEach((res) => res.write(`: ${id}\n\n`));
+    // add event to json and convert json to data
+    const data = JSON.stringify({ eventType, ...json });
+    // broadcast data to all relevant connections
+    connections.forEach((connection) => {
+      connection.write('id: ' + id + '\n');
+      connection.write('data: ' + data + '\n\n');
+    });
+  }
+
   streamClose (res, events) {
     this.connections.delete(res);
     for (const event of events) {
@@ -115,24 +133,6 @@ class Server {
       'Access-Control-Allow-Origin': '*'
     });
     res.write('\n\n');
-  }
-
-  streamEmit (json, eventType) {
-    let connections;
-    if (eventType && eventType in this.eventConnections) {
-      connections = this.eventConnections[eventType];
-    } else connections = this.connections;
-    // build stream messge
-    const id = new Date().toISOString();
-    // for empty broadcasts (heartbeats), simply send the id in a comment
-    if (!json) return connections.forEach((res) => res.write(`: ${id}\n\n`));
-    // add event to json and convert json to data
-    const data = JSON.stringify({ eventType, ...json });
-    // broadcast data to all relevant connections
-    connections.forEach((connection) => {
-      connection.write('id: ' + id + '\n');
-      connection.write('data: ' + data + '\n\n');
-    });
   }
 
   respond (res, content, statusCode = 404, statusMessage = '') {

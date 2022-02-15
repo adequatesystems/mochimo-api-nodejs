@@ -13,129 +13,34 @@ BigInt.prototype.toJSON = function () { return this.toString(); };
 
 console.log('\n// START: ' + __filename);
 
-const capitalize = (s) => s.length ? s[0].toUpperCase() + s.slice(1) : '';
-const searchAppend = (search, str) => (search ? search + '&' : '?') + str;
-const rwdShuffle = (array, maxItems = 16) => {
-  // in-place destructive shuffling algo, reverse widening deletion
-  let b = 0;
-  const bf = Math.floor(Math.cbrt(array.length)) || 1;
-  while (array.length > maxItems) {
-    const u = array.length - 1; // upper bound
-    const l = Math.max(0, u - ((b++) / bf)); // lower bound
-    const r = Math.floor(Math.random() * (u - l + 1) + l); // bound rng
-    array.splice(r, 1); // remove selected index
-  }
-  // return array for convenience
-  return array;
-};
-
 /* regex */
 const regexParams = /^[?]?(?:[0-9a-z]+(?:(?:<>|<=|>=|<|>|=)[0-9a-z-.*]+)?[&|]?)*$/i;
-const regexKeyValue = /^([0-9a-z]+)(?:(<>|<=|>=|<|>|=)([0-9a-z-.*]+))?$/i;
 
 /* modules and utilities */
-const { blockReward, projectedSupply, round } = require('./apiUtils');
+const {
+  blockReward, capitalize, projectedSupply, round, rwdShuffle, searchAppend
+} = require('./apiUtils');
+const DB = require('./dbmysql');
 const Server = require('./server');
 const BlkScanner = require('./scannerblk');
 const MemScanner = require('./scannermem');
 const NetScanner = require('./scannernet');
 const { createHash } = require('crypto');
 const mochimo = require('mochimo');
-const mysql2 = require('mysql2');
 
 /* environment configuration */
 require('dotenv').config();
 
-/* database configuration */
-const mysql = {
-  rw: mysql2.createPool({
-    database: process.env.DBNAME || 'mochimo',
-    password: process.env.DBPASS || 'password',
-    user: process.env.DBUSER || 'mochimo',
-    host: process.env.DBHOST || 'localhost',
-    port: process.env.DBPORT_RW || process.env.DBPORT || 3306,
-    waitForConnections: true,
-    supportBigNumbers: true,
-    bigNumberStrings: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    timezone: 'Z'
-  }),
-  ro: mysql2.createPool({
-    database: process.env.DBNAME || 'mochimo',
-    password: process.env.DBPASS || 'password',
-    user: process.env.DBUSER || 'mochimo',
-    host: process.env.DBHOST || 'localhost',
-    port: process.env.DBPORT_RO || process.env.DBPORT || 3306,
-    waitForConnections: true,
-    supportBigNumbers: true,
-    bigNumberStrings: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    timezone: 'Z'
-  }),
-  query: (table, options, callback) => {
-    let { limit, offset, orderby, search, select } = options;
-    let nConditions = 0;
-    let where = '';
-    // consume search and place in `where`
-    while (search) {
-      const nextbrkp = search.slice(1).search(/[?&|]/g) + 1;
-      const condition = nextbrkp
-        ? search.slice(1, nextbrkp)
-        : search.slice(1);
-      // check condition
-      if (condition) {
-        const matched = condition.match(regexKeyValue);
-        if (matched) {
-          // drop match
-          matched.shift();
-          let [column, comparitor, value] = matched;
-          // check for "special" parameters
-          if (value) {
-            switch (column) {
-              case 'limit':
-                // cleanse limit value
-                limit = isNaN(value) ? 10 : Number(value);
-                if (limit > 100) limit = 100;
-                if (limit < 0) limit = 0;
-                break;
-              case 'offset':
-                // cleanse offset value
-                offset = isNaN(value) ? 0 : Number(value);
-                if (offset < 0) offset = 0;
-                break;
-              default:
-                if (value.includes('*')) {
-                  value = value.replace(/[*]/g, '%');
-                  if (comparitor === '<>') comparitor = 'NOT LIKE';
-                  else if (comparitor === '=') comparitor = 'LIKE';
-                }
-                // apply condition extension and modified condition
-                if (nConditions++) {
-                  if (search.charAt(0) === '&') where += ' AND ';
-                  if (search.charAt(0) === '|') where += ' OR ';
-                }
-                where += `\`${column}\` ${comparitor} '${value}'`;
-            }
-          }
-        }
-      }
-      // reduce search for next round
-      search = nextbrkp ? search.slice(nextbrkp) : '';
-    }
-    // perform restricted query
-    mysql.ro.query(`
-      SELECT ${
-        Array.isArray(select) ? select.join(', ') : (select || '*')}
-      from \`${table}\`
-      ${where ? `WHERE ${where}` : ''}
-      ${orderby ? `ORDER BY ${orderby}` : ''}
-      ${limit ? `LIMIT ${limit}` : 'LIMIT 10'}
-      ${offset ? `OFFSET ${offset}` : ''}
-    `, callback);
-  }
+// create database pools (rw/ro)
+const dbopts = {
+  database: process.env.DBNAME || 'mochimo',
+  password: process.env.DBPASS || 'password',
+  user: process.env.DBUSER || 'mochimo',
+  host: process.env.DBHOST || 'localhost',
+  port: process.env.DBPORT || 3306
 };
+const db = new DB({ ...dbopts, port: process.env.DBPORT_RW || dbopts.port });
+const dbro = new DB({ ...dbopts, port: process.env.DBPORT_RO || dbopts.port });
 
 // create Server instance
 const server = new Server({
@@ -145,15 +50,9 @@ const server = new Server({
 });
 
 // start scanners
-const blkscanner = new BlkScanner({
-  db: mysql.rw, emit: server.streamEmit.bind(server)
-});
-const memscanner = new MemScanner({
-  db: mysql.rw, emit: server.streamEmit.bind(server)
-});
-const netscanner = new NetScanner({
-  db: mysql.rw, emit: server.streamEmit.bind(server)
-});
+const blkscanner = new BlkScanner({ db, emit: server.stream.bind(server) });
+const memscanner = new MemScanner({ db, emit: server.stream.bind(server) });
+const netscanner = new NetScanner({ db, emit: server.stream.bind(server) });
 
 /* route configuration */
 server.enableRoute({
@@ -173,7 +72,7 @@ server.enableRoute({
       search = searchAppend(search, `${type}=${address}*`);
     }
     const options = { orderby: '`bnum` DESC', search };
-    mysql.query('balance', options, (error, results) => {
+    dbro.request('balance', options, (error, results) => {
       // process results depending on request
       if (error) server.respond(res, Server.Error(error), 500);
       else server.respond(res, { results }, 200);
@@ -250,7 +149,7 @@ server.enableRoute({
     if (bnum) search = searchAppend(search, `bnum=${Number(bnum)}`);
     // perform block search
     const options = { orderby: '`bnum` DESC', search };
-    mysql.query('block', options, (error, results) => {
+    dbro.request('block', options, (error, results) => {
       if (error) server.respond(res, Server.Error(error), 500);
       else {
         if (bparam) server.respond(res, results[0][bparam], 200);
@@ -284,7 +183,7 @@ server.enableRoute({
     if (bnum) search = searchAppend(search, `bnum<=${Number(bnum)}`);
     // perform initial block search
     const options = { limit: 768, orderby: '`bnum` DESC', search };
-    mysql.query('block', options, (error, results) => {
+    dbro.request('block', options, (error, results) => {
       if (error) server.respond(res, Server.Error(error), 500);
       else if (!results.length) {
         server.respond(res, { message: 'Blocks not yet available...' });
@@ -415,7 +314,7 @@ server.enableRoute({
   handler: async (res, search) => {
     // perform richlist search
     const options = { orderby: '`rank` ASC', search };
-    mysql.query('richlist', options, (error, results) => {
+    dbro.request('richlist', options, (error, results) => {
       if (error) server.respond(res, Server.Error(error), 500);
       else server.respond(res, { results }, 200);
     });
@@ -432,7 +331,7 @@ server.enableRoute({
     if (txid) search = (search ? search + '&' : '?') + `txid=${txid}*`;
     // perform transaction search
     const options = { orderby: '`created` DESC', search };
-    mysql.query('transaction', options, (error, results) => {
+    dbro.request('transaction', options, (error, results) => {
       if (error) server.respond(res, Server.Error(error), 500);
       else server.respond(res, { results }, 200);
     });
