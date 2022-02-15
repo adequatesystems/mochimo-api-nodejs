@@ -10,14 +10,24 @@ THISIP=$(hostname -I | awk '{print $1;}')
 
   echo
   echo "WARNING: BEFORE YOU CONTINUE..."
+  echo
   echo "  To ensure every server in the cluster can identify this server,"
   echo "  add the following IP and Hostname to /etc/hosts on every server"
   echo "  that is to be, or is already, an instance of the cluster:"
   echo
   echo "    $THISIP $THISHOST"
   echo
-  echo "  Likewise, add similar information of every other server in the"
-  echo "  cluster to /etc/hosts on THIS server before continuing."
+  echo "  Likewise, add the ip/hostname information of every other server"
+  echo "  in the cluster to /etc/hosts on THIS server before continuing."
+  echo
+  echo "  Additionally, and if enabled, ensure your firewall will accept"
+  echo "  incoming connections from every server in the cluster, to port"
+  echo "  3306 and 33061. For example:"
+  echo
+  echo "  ufw allow from $THISIP to any port 3306"
+  echo "  ufw allow from $THISIP to any port 33061"
+  echo
+  echo "WARNING: By continuing, you acknowledge the prerequisites above."
   echo
   read -p 'Ctrl+C to Abort. Press enter to continue...'
   echo
