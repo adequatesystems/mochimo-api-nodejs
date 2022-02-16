@@ -168,6 +168,10 @@ class BlockScanner extends Watcher {
             }
           }
         }
+        // clear balance entries for block before continuing
+        await this.db.promise().query(
+          'DELETE FROM `balance` WHERE `bnum` = ? AND `bhash` = ?',
+          [bnum, bhash], iferror.bind(this, '// balance DELETE EXISTING'));
         // build array of ledger entries, then rank (sort) by descending balance
         const ledger = block.ledger.map((lentry) => {
           let { address } = lentry;
