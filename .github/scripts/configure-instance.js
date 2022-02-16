@@ -82,5 +82,6 @@ while (updatelist.length) {
 print('\n');
 print('Adding instance to cluster...');
 shell.connect({ user: adminUser, password, host: clusterHost, port });
+shell.options['dba.restartWaitTimeout'] = 300;
 dba.getCluster().addInstance(
   `${adminUser}@${hostname}`, { ipAllowlist, recoveryMethod: 'clone' });
