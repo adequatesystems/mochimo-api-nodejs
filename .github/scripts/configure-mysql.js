@@ -114,5 +114,7 @@ shell.getSession().runSql(
 shell.getSession().runSql(
   "GRANT INSERT, SELECT, UPDATE ON mochimo.* TO 'mochimo'@'%'");
 shell.getSession().runSql(
-  "GRANT DELETE ON mochimo.richlist TO 'mochimo'@'%'");
+  "GRANT DELETE ON `mochimo`.`balance` TO 'mochimo'@'%'");
+shell.getSession().runSql(
+  "GRANT DELETE ON `mochimo`.`richlist` TO 'mochimo'@'%'");
 shell.getSession().runSql('FLUSH PRIVILEGES');
