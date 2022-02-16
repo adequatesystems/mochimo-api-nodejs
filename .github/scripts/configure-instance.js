@@ -53,7 +53,7 @@ do {
 } while (!shell.getSession());
 print('Restart complete!\n\n');
 
-print('Connecting to cluster...');
+print('Connecting to cluster...\n');
 shell.connect({ user: adminUser, password, host: clusterHost, port });
 
 // obtain allowlist
@@ -80,7 +80,7 @@ while (updatelist.length) {
 }
 
 print('\n');
-print('Adding instance to cluster...');
+print('(re)Connecting with cluster server...\n');
 shell.connect({ user: adminUser, password, host: clusterHost, port });
 shell.options['dba.restartWaitTimeout'] = 300;
 dba.getCluster().addInstance(
