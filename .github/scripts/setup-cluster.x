@@ -39,8 +39,8 @@ git pull
 # install MySQL Router
 apt install -y mysql-router
 # add hostname to localhost
-( grep -q -E "^127.0.0.1 localhost.*$" /etc/hosts && \
-  sed -i -E "s/^127.0.0.1 localhost.*$/127.0.0.1 localhost $(hostname)/g" \
+( grep -q -E "^127.0.0.1\slocalhost.*$" /etc/hosts && \
+  sed -i -E "s/^127.0.0.1\slocalhost.*$/127.0.0.1 localhost $(hostname)/g" \
   /etc/hosts || echo "127.0.0.1 localhost $THISHOST" >> /etc/hosts )
 
 # execute configuration script for cluster or instance
