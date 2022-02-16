@@ -14,6 +14,7 @@ const clusterAdmin = "'icadmin'@'%'";
 const adminUser = 'icadmin';
 const interactive = false;
 const restart = true;
+const port = 3306;
 
 do {
   try {
@@ -22,7 +23,7 @@ do {
     confirm = getPassword(
       "Please confirm the password for 'root@localhost': ");
     if (password !== confirm) throw new Error('Passwords do not match');
-    shell.connect({ user: 'root', password, host: 'localhost' });
+    shell.connect({ user: 'root', password, host: 'localhost', port });
   } catch (error) {
     print(`${error.message}\n\n`);
   }
@@ -45,7 +46,7 @@ os.sleep(5);
 
 do {
   try {
-    shell.connect({ user: adminUser, password, host: 'localhost' });
+    shell.connect({ user: adminUser, password, host: 'localhost', port });
   } catch (error) {
     os.sleep(2);
   }
@@ -53,7 +54,7 @@ do {
 print('Restart complete!\n\n');
 
 print('Connecting to cluster...');
-shell.connect({ user: adminUser, password, host: clusterHost });
+shell.connect({ user: adminUser, password, host: clusterHost, port });
 
 // obtain allowlist
 let ipAllowlist = shell.getSession()
@@ -70,7 +71,7 @@ while (updatelist.length) {
   const server = updatelist.pop();
   print(`${server}... `);
   try {
-    shell.connect({ user: adminUser, password, host: server })
+    shell.connect({ user: adminUser, password, host: server, port })
       .runSql(`SET PERSIST group_replication_ip_allowlist='${ipAllowlist}'`);
     print('updated\n');
   } catch (error) {
@@ -80,6 +81,6 @@ while (updatelist.length) {
 
 print('\n');
 print('Adding instance to cluster...');
-shell.connect({ user: adminUser, password, host: clusterHost });
+shell.connect({ user: adminUser, password, host: clusterHost, port });
 dba.getCluster().addInstance(
   `${adminUser}@${hostname}`, { ipAllowlist, recoveryMethod: 'clone' });

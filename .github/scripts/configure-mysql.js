@@ -10,12 +10,13 @@ print('  MySQL Database Configuration\n');
 print('  ============================\n\n');
 
 let confirmPassword, password;
+const port = 3306;
 
 do {
   password = getPassword(
     "Please provide the password for 'root@localhost': ");
   try {
-    shell.connect({ user: 'root', password, host: 'localhost' });
+    shell.connect({ user: 'root', password, host: 'localhost', port });
   } catch (error) {
     print(error.message + '\n\n');
   }

@@ -14,6 +14,7 @@ const clusterAdmin = "'icadmin'@'%'";
 const adminUser = 'icadmin';
 const interactive = false;
 const restart = true;
+const port = 3306;
 
 do {
   try {
@@ -22,7 +23,7 @@ do {
     confirm = getPassword(
       "Please confirm the password for 'root@localhost': ");
     if (password !== confirm) throw new Error('Passwords do not match');
-    shell.connect({ user: 'root', password, host: 'localhost' });
+    shell.connect({ user: 'root', password, host: 'localhost', port });
   } catch (error) {
     print(`${error.message}\n\n`);
   }
@@ -39,7 +40,7 @@ os.sleep(5);
 
 do {
   try {
-    shell.connect({ user: adminUser, password, host: 'localhost' });
+    shell.connect({ user: adminUser, password, host: 'localhost', port });
   } catch (error) {
     os.sleep(2);
   }
