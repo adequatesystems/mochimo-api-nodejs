@@ -24,8 +24,7 @@ THISIP=$(hostname -I | awk '{print $1;}')
   echo "  incoming connections from every server in the cluster, to port"
   echo "  3306 and 33061. For example:"
   echo
-  echo "  ufw allow from $THISIP to any port 3306"
-  echo "  ufw allow from $THISIP to any port 33061"
+  echo "  ufw allow from $THISIP to any port 3306,33060,33061 proto tcp"
   echo
   echo "WARNING: By continuing, you acknowledge the prerequisites above."
   echo
