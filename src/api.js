@@ -347,6 +347,8 @@ server.enableStream({
 /* initialize cleanup crew */
 const cleanup = (e, src) => {
   console.log(`\n// GLOBAL CLEANUP: initiated from source(${src})...`);
+  db.end();
+  dbro.end();
   server.cleanup()
     .then(blkscanner.cleanup.bind(blkscanner))
     .then(memscanner.cleanup.bind(memscanner))
