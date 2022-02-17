@@ -4,6 +4,21 @@
  * For more information, see License.md
  */
 
+/* global BigInt */
+const MaxBigInt = (...args) => args.reduce((m, v) => m >= v ? m : v);
+const MinBigInt = (...args) => args.reduce((m, v) => m <= v ? m : v);
+const NormalizeBigInt = (bigint, signed) => {
+  bigint = BigInt(bigint);
+  if (signed) {
+    bigint = MinBigInt(bigint, 0x7fffffffffffffffn);
+    bigint = MaxBigInt(bigint, -0x8000000000000000n);
+  } else {
+    bigint = MinBigInt(bigint, 0xffffffffffffffffn);
+    bigint = MaxBigInt(bigint, 0x0n);
+  }
+  return String(bigint);
+};
+
 /* modules and utilities */
 const Watcher = require('./watcher');
 const { createHash } = require('crypto');
@@ -94,6 +109,8 @@ class BlockScanner extends Watcher {
       const started = new Date(time0 * 1000);
       const blockJSON = { created, started, ...block.toJSON(true) };
       delete blockJSON.stime; delete blockJSON.time0;
+      // normalize amount
+      blockJSON.amount = MinBigInt(0xffffffffffffffffn, blockJSON.amount);
       // perform (and wait for successful) INSERT
       await this.db.promise().query('INSERT INTO `block` SET ?', blockJSON);
       // emit to stream
@@ -195,8 +212,8 @@ class BlockScanner extends Watcher {
           // ... determine balance delta and submit to balance database
           const pbalance = pngaddr[id] ? pngaddr[id].balance : 0n;
           if (pbalance !== lentry.balance) {
-            // determine delta and push change
-            const delta = lentry.balance - pbalance;
+            // determine delta and push change (and normalize)
+            const delta = NormalizeBigInt(lentry.balance - pbalance);
             // INSERT balance changes
             // ... if pnghash was determined, update on duplicate key
             this.db.query(
@@ -216,6 +233,8 @@ class BlockScanner extends Watcher {
         // INSERT remaining pngaddr as emptied
         // ... if pnghash was determined, update on duplicate key
         for (const id in pngaddr) {
+          // normalize deltas before insert
+          pngaddr[id].delta = NormalizeBigInt(pngaddr[id].delta);
           this.db.query(
             pngbhash
               ? 'INSERT INTO `balance` SET ? ON DUPLICATE KEY UPDATE ' +
