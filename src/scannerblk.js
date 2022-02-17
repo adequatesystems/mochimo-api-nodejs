@@ -213,7 +213,7 @@ class BlockScanner extends Watcher {
           const pbalance = pngaddr[id] ? pngaddr[id].balance : 0n;
           if (pbalance !== lentry.balance) {
             // determine delta and push change (and normalize)
-            const delta = NormalizeBigInt(lentry.balance - pbalance);
+            const delta = NormalizeBigInt(lentry.balance - pbalance, true);
             // INSERT balance changes
             // ... if pnghash was determined, update on duplicate key
             this.db.query(
@@ -234,7 +234,7 @@ class BlockScanner extends Watcher {
         // ... if pnghash was determined, update on duplicate key
         for (const id in pngaddr) {
           // normalize deltas before insert
-          pngaddr[id].delta = NormalizeBigInt(pngaddr[id].delta);
+          pngaddr[id].delta = NormalizeBigInt(pngaddr[id].delta, true);
           this.db.query(
             pngbhash
               ? 'INSERT INTO `balance` SET ? ON DUPLICATE KEY UPDATE ' +
