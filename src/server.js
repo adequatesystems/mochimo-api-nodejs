@@ -244,7 +244,7 @@ class Server {
         }
       }
       // if a search query is included, ensure query is valid
-      const search = decodeURI(requestURL.search);
+      const search = decodeURIComponent(requestURL.search);
       if (search && routeMatch.param instanceof RegExp) {
         if (!routeMatch.param.test(search)) {
           return this.respond(res, {
