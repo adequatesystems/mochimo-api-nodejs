@@ -22,13 +22,10 @@ const NormalizeBigInt = (bigint, signed) => {
 /* modules and utilities */
 const Watcher = require('./watcher');
 const { createHash } = require('crypto');
+const { Readable, PassThrough } = require('stream');
 const mochimo = require('mochimo');
 const path = require('path');
 const fs = require('fs');
-
-function iferror (msg, err) {
-  if (err) console.error(this.name, msg, err);
-}
 
 const farchive = (bnum, bhash) => {
   return `b${asUint64String(bnum)}x${bhash.slice(0, 8)}.bc`;
@@ -105,12 +102,14 @@ class BlockScanner extends Watcher {
       // edit filename for archives
       filename = farchive(bnum, bhash);
       // build JSON block data for INSERT
-      const created = new Date(stime * 1000);
-      const started = new Date(time0 * 1000);
+      const created = new Date(stime * 1000).toISOString()
+        .replace(/(.*)T(.*)\..*/, '$1 $2');
+      const started = new Date(time0 * 1000).toISOString()
+        .replace(/(.*)T(.*)\..*/, '$1 $2');
       const blockJSON = { created, started, ...block.toJSON(true) };
       delete blockJSON.stime; delete blockJSON.time0;
       // normalize amount
-      blockJSON.amount = MinBigInt(0xffffffffffffffffn, blockJSON.amount);
+      blockJSON.amount = NormalizeBigInt(blockJSON.amount);
       // perform (and wait for successful) INSERT
       await this.db.promise().query('INSERT INTO `block` SET ?', blockJSON);
       // emit to stream
@@ -118,17 +117,44 @@ class BlockScanner extends Watcher {
       // ======================
       // Transaction processing
       if (blockJSON.type === mochimo.Block.NORMAL) {
-        // declare additional parameters for trasaction submissions
-        const confirmed = created;
-        const transactionAddDb = { created, confirmed, bnum, bhash };
-        // INSERT transactions as IODKU operations for confirmed
-        for (const txentry of block.transactions) {
-          this.db.query(
-            'INSERT INTO `transaction` SET ? ON DUPLICATE KEY UPDATE' +
-            '`confirmed` = VALUES(`confirmed`), ' +
-            '`bnum` = VALUES(`bnum`), `bhash` = VALUES(`bhash`)',
-            { ...transactionAddDb, ...txentry.toJSON(true) },
-            iferror.bind(this, '// transaction INSERT'));
+        // declare additional parameters for trasactions
+        const txinfo = { created, confirmed: created, bnum, bhash };
+        const transactions = block.transactions.map((txentry) => {
+          return { ...txinfo, ...txentry.toJSON(true) };
+        });
+        // define temporary table name
+        const table = '`~txs' + bhash.slice(0, 8) + '`';
+        // create connection specifically for inserting transactions
+        const connection = await this.db.promise().getConnection();
+        // ensure connection is always released back to pool
+        try {
+          // create temporary table for bulk data
+          await connection.query('CREATE TEMPORARY TABLE ' + table +
+            ' SELECT * FROM `mochimo`.`transaction` LIMIT 0');
+          // stream transactions as CSV to temp table
+          const fields = Object.keys(transactions[0]);
+          const sql =
+            'LOAD DATA LOCAL INFILE "stream" INTO TABLE ' + table +
+            ' FIELDS TERMINATED BY "," LINES TERMINATED BY ";"' +
+            ' (' + fields.join(', ') + ')';
+          const infileStreamFactory = () => Readable.from((async function * () {
+            for (let i = 0; i < transactions.length; i++) {
+              yield (i !== 0 ? ';' : '') + fields.reduce((a, c) => {
+                return a + (a ? ',' : '') + transactions[i][c];
+              }, '');
+            }
+          })()).pipe(new PassThrough());
+          await connection.query({ sql, infileStreamFactory });
+          // insert into transaction table with temp table (IODKU)
+          await connection.query(
+            'INSERT INTO `transaction` SELECT * from ' + table +
+            ' ON DUPLICATE KEY UPDATE `confirmed` = VALUES(`confirmed`),' +
+            ' `bnum` = VALUES(`bnum`), `bhash` = VALUES(`bhash`)');
+        } catch (error) {
+          console.error(this.name, '// TRANSACTION', error);
+        } finally {
+          // return connection to pool
+          if (connection) connection.release();
         }
       }
       // =================
@@ -136,19 +162,19 @@ class BlockScanner extends Watcher {
       if (blockJSON.type === mochimo.Block.GENESIS ||
           blockJSON.type === mochimo.Block.NEOGENESIS) {
         let pngbhash = null;
-        const pngaddr = {};
+        const ngdata = {};
         if (bnum > 255n) {
           const pngbnum = bnum - 256n;
           // trace chain back to previous neogenesis block hash
-          const blockResults = await this.db.promise().query(
+          const [blockResults] = await this.db.promise().query(
             'SELECT * FROM `block` WHERE `bnum` < ? AND `bnum` >= ?' +
             ' ORDER BY `bnum` DESC', [bnum, pngbnum]);
           let phash = blockJSON.phash;
           for (let i = 0; i < blockResults.length; i++) {
             if (blockResults[i].bhash !== phash) continue;
             phash = blockResults[i].phash;
-            if (blockResults[i].bnum === pngbnum) {
-              pngbhash = blockResults.bhash;
+            if (blockResults[i].bnum === pngbnum.toString()) {
+              pngbhash = blockResults[i].bhash;
               break;
             }
           }
@@ -170,78 +196,85 @@ class BlockScanner extends Watcher {
               if (!pngblock.verifyBlockHash()) {
                 throw new Error(`${filepath} block hash could not be verified`);
               }
-              // create list of previous address balances
+              // declare additional parameters for neogen data
+              const leinfo = { created, bnum, bhash };
+              const fields = [
+                'created', 'bnum', 'bhash', 'address',
+                'addressHash', 'tag', 'balance', 'delta'
+              ];
+              // load previous neogen data
               for (const lentry of pngblock.ledger) {
                 let { address } = lentry;
                 const { balance, tag } = lentry;
-                const delta = -(balance);
                 const id = createHash('sha256').update(address).digest('hex');
+                const delta = NormalizeBigInt(-(balance), true);
                 address = address.slice(0, 64);
-                pngaddr[id] = { address, addressHash: id, tag, balance, delta };
+                ngdata[id] = {
+                  ...leinfo, address, addressHash: id, tag, balance, delta
+                };
+              }
+              // load latest neogen data
+              for (const lentry of block.ledger) {
+                let { address } = lentry;
+                const { balance, tag } = lentry;
+                const id = createHash('sha256').update(address).digest('hex');
+                const pbalance = id in ngdata ? ngdata[id].balance : 0n;
+                const delta = NormalizeBigInt(balance - pbalance, true);
+                address = address.slice(0, 64);
+                ngdata[id] = {
+                  ...leinfo, address, addressHash: id, tag, balance, delta
+                };
+              }
+              // define temporary table name
+              const table = '`~neo' + bhash.slice(0, 8) + '`';
+              // create connection specifically for inserting transactions
+              const connection = await this.db.promise().getConnection();
+              // ensure connection is always released back to pool
+              try {
+                // create temporary table for bulk data
+                await connection.query('CREATE TEMPORARY TABLE ' + table +
+                  ' SELECT * FROM `mochimo`.`balance` LIMIT 0');
+                // stream neogen data as CSV to temp table
+                const sql =
+                  'LOAD DATA LOCAL INFILE "stream" INTO TABLE ' + table +
+                  ' FIELDS TERMINATED BY "," LINES TERMINATED BY ";"' +
+                  ' (' + fields.join(', ') + ')';
+                const infileStreamFactory = () => {
+                  return Readable.from((async function * () {
+                    let count = 0;
+                    for (const id in ngdata) {
+                      yield (count++ ? ';' : '') + fields.reduce((a, c) => {
+                        return a + (a ? ',' : '') + ngdata[id][c];
+                      }, '');
+                    }
+                  })()).pipe(new PassThrough());
+                };
+                await connection.query({ sql, infileStreamFactory });
+                // (pre)DELETE un-needed ranks from richlist
+                await connection.query(
+                  'DELETE FROM `richlist` WHERE `rank` >' +
+                  ' (SELECT count(*) FROM ' + table + ' WHERE `balance` > 0)');
+                // REPLACE into richlist table from temp (add RANK())
+                await connection.query(
+                  'REPLACE INTO `richlist` SELECT `address`, `addressHash`,' +
+                  ' `tag`, `balance`, RANK() OVER(ORDER BY `balance` DESC)' +
+                  ' as `rank` from ' + table + ' WHERE `balance` > 0');
+                // insert into balance table from temp table (IODKU)
+                await connection.query(
+                  'INSERT INTO `balance` SELECT `created`, `bnum`, `bhash`,' +
+                  ' `address`, `addressHash`, `tag`, `balance`, `delta`' +
+                  ' from ' + table + ' WHERE delta != 0');
+              } catch (error) {
+                console.error(this.name, '// NEOGENESIS', error);
+              } finally {
+                // return connection to pool
+                if (connection) connection.release();
               }
             } catch (pngError) {
               // report error and continue
               console.warn(this.name, '// Previous Neogenesis', pngError);
             }
           }
-        }
-        // clear balance entries for block before continuing
-        await this.db.promise().query(
-          'DELETE FROM `balance` WHERE `bnum` = ? AND `bhash` = ?',
-          [bnum, bhash], iferror.bind(this, '// balance DELETE EXISTING'));
-        // build array of ledger entries, then rank (sort) by descending balance
-        const ledger = block.ledger.map((lentry) => {
-          let { address } = lentry;
-          const { balance, tag } = lentry;
-          const addressHash = createHash('sha256').update(address).digest('hex');
-          address = address.slice(0, 64);
-          return { address, addressHash, tag, balance };
-        }).sort((a, b) => {
-          return (a.balance < b.balance) ? 1 : (a.balance > b.balance) ? -1 : 0;
-        });
-        // declare additional parameters for balance delta submissions
-        const balananceAddDb = { created, bnum, bhash };
-        let rank; // for every rank (or ledger entry)...
-        for (rank = 0; rank < ledger.length; rank++) {
-          // ... apply rank to entry and submit to richlist database
-          const lentry = ledger[rank];
-          const id = lentry.addressHash;
-          this.db.query('REPLACE INTO `richlist` SET ?',
-            { rank: rank + 1, ...lentry },
-            iferror.bind(this, '// richlist REPLACE'));
-          // ... determine balance delta and submit to balance database
-          const pbalance = pngaddr[id] ? pngaddr[id].balance : 0n;
-          if (pbalance !== lentry.balance) {
-            // determine delta and push change (and normalize)
-            const delta = NormalizeBigInt(lentry.balance - pbalance, true);
-            // INSERT balance changes
-            // ... if pnghash was determined, update on duplicate key
-            this.db.query(
-              pngbhash
-                ? 'INSERT INTO `balance` SET ? ON DUPLICATE KEY UPDATE ' +
-                '`balance` = VALUES(`balance`), `delta` = VALUES(`delta`)'
-                : 'INSERT INTO `balance` SET ?',
-              { ...balananceAddDb, ...lentry, delta },
-              iferror.bind(this, '// balance INSERT'));
-          }
-          // remove entry from pngaddr cache
-          delete pngaddr[id];
-        }
-        // DELETE remaining richlist ranks (if any)
-        this.db.query('DELETE FROM `richlist` WHERE `rank` > ?', rank,
-          iferror.bind(this, '// richlist DELETE'));
-        // INSERT remaining pngaddr as emptied
-        // ... if pnghash was determined, update on duplicate key
-        for (const id in pngaddr) {
-          // normalize deltas before insert
-          pngaddr[id].delta = NormalizeBigInt(pngaddr[id].delta, true);
-          this.db.query(
-            pngbhash
-              ? 'INSERT INTO `balance` SET ? ON DUPLICATE KEY UPDATE ' +
-              '`balance` = VALUES(`balance`), `delta` = VALUES(`delta`)'
-              : 'INSERT INTO `balance` SET ?',
-            { ...balananceAddDb, ...pngaddr[id], balance: 0n },
-            iferror.bind(this, '// remaining balance INSERT'));
         }
       }
       // check recovery flag
