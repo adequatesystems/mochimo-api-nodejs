@@ -109,7 +109,9 @@ class BlockScanner extends Watcher {
       const blockJSON = { created, started, ...block.toJSON(true) };
       delete blockJSON.stime; delete blockJSON.time0;
       // normalize amount
-      blockJSON.amount = NormalizeBigInt(blockJSON.amount);
+      if (blockJSON.amount) {
+        blockJSON.amount = NormalizeBigInt(blockJSON.amount);
+      }
       // perform (and wait for successful) INSERT
       await this.db.promise().query('INSERT INTO `block` SET ?', blockJSON);
       // emit to stream
