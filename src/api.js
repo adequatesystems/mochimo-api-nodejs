@@ -57,7 +57,26 @@ const netscanner = new NetScanner({ db, emit: server.stream.bind(server) });
 server.enableRoute({
   method: 'GET',
   path: /^\/$/,
-  handler: async (res) => server.respond(res, 'OK', 200)
+  handler: async (res) => {
+    const start = Date.now();
+    dbro.query('SHOW TABLE STATUS', (error, results) => {
+      server.respond(res, {
+        ms: Date.now() - start,
+        status: 'OK',
+        database: error || 'OK',
+        tables: results.reduce((tables, next) => {
+          // eslint-disable-next-line camelcase
+          const { Name, Rows, Data_length, Index_length } = next;
+          // eslint-disable-next-line camelcase
+          const { Create_time, Update_time } = next;
+          tables[Name] = {
+            Rows, Data_length, Index_length, Create_time, Update_time
+          };
+          return tables;
+        }, {})
+      }, 200);
+    });
+  }
 });
 server.enableRoute({
   method: 'GET',
