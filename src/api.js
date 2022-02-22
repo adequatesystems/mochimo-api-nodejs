@@ -71,7 +71,10 @@ server.enableRoute({
       const [tables] = results[1].value || [results[1].reason];
       server.respond(res, {
         status: 'OK',
-        members: members?.reduce((mbrs, { member }) => mbrs.push(member), []),
+        members: members?.reduce((mbrs, { member }) => {
+          mbrs.push(member);
+          return mbrs;
+        }, []),
         tables: tables?.reduce((tbls, { name, count, size, indexed }) => {
           return Object.assign(tbls, { [name]: { count, size, indexed } });
         }, {})
