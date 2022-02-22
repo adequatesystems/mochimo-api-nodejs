@@ -58,13 +58,10 @@ server.enableRoute({
   method: 'GET',
   path: /^\/$/,
   handler: async (res) => {
-    const start = Date.now();
     Promise.allSettled([
-      dbro.promise().query({
-        sql: "SELECT `MEMBER_HOST` as 'members'" +
-          ' FROM `performance_schema`.`replication_group_members`',
-        rowsAsArray: true
-      }),
+      dbro.promise().query(
+        "SELECT `MEMBER_HOST` as 'member'" +
+        ' FROM `performance_schema`.`replication_group_members`'),
       dbro.promise().query(
         "SELECT `TABLE_NAME` as 'name', `TABLE_ROWS` as 'count'," +
         " `DATA_LENGTH` as 'size', `INDEX_LENGTH` as 'indexed' FROM" +
@@ -73,10 +70,9 @@ server.enableRoute({
       const [members] = results[0].value || [results[0].reason];
       const [tables] = results[1].value || [results[1].reason];
       server.respond(res, {
-        ms: Date.now() - start,
         status: 'OK',
-        members,
-        tables: tables.reduce((tbls, { name, count, size, indexed }) => {
+        members: members?.reduce((mbrs, { member }) => mbrs.push(member), []),
+        tables: tables?.reduce((tbls, { name, count, size, indexed }) => {
           return Object.assign(tbls, { [name]: { count, size, indexed } });
         }, {})
       }, 200);
