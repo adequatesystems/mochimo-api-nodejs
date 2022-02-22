@@ -59,23 +59,26 @@ server.enableRoute({
   path: /^\/$/,
   handler: async (res) => {
     const start = Date.now();
-    dbro.query('SHOW TABLE STATUS', (error, results) => {
+    Promise.allSettled([
+      dbro.promise().query(
+        "SELECT `MEMBER_HOST` as 'members'" +
+        ' FROM `performance_schema`.`replication_group_members`'),
+      dbro.promise().query(
+        "SELECT `TABLE_NAME` as 'name', `TABLE_ROWS` as 'count'," +
+        " `DATA_LENGTH` as 'size', `INDEX_LENGTH` as 'indexed' FROM" +
+        ' `information_schema`.`tables` WHERE `table_schema` = DATABASE()')
+    ]).then((results) => {
+      const [members] = results[0].value || [results[0].reason];
+      const [tables] = results[1].value || [results[1].reason];
       server.respond(res, {
         ms: Date.now() - start,
         status: 'OK',
-        database: error || 'OK',
-        tables: results.reduce((tables, next) => {
-          // eslint-disable-next-line camelcase
-          const { Name, Rows, Data_length, Index_length } = next;
-          // eslint-disable-next-line camelcase
-          const { Create_time, Update_time } = next;
-          tables[Name] = {
-            Rows, Data_length, Index_length, Create_time, Update_time
-          };
-          return tables;
+        members,
+        tables: tables.reduce((tbls, { name, count, size, indexed }) => {
+          return Object.assign(tbls, { [name]: { count, size, indexed } });
         }, {})
       }, 200);
-    });
+    }).catch((error) => server.respond(res, Server.Error(error), 500));
   }
 });
 server.enableRoute({
