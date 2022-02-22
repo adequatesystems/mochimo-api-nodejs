@@ -97,7 +97,7 @@ server.enableRoute({
     dbro.request('balance', options, (error, results) => {
       // process results depending on request
       if (error) server.respond(res, Server.Error(error), 500);
-      else server.respond(res, results, 200);
+      else server.respond(res, [...results], 200);
     });
   }
 });
@@ -175,7 +175,7 @@ server.enableRoute({
       if (error) server.respond(res, Server.Error(error), 500);
       else {
         if (bparam) server.respond(res, results[0][bparam], 200);
-        else server.respond(res, results, 200);
+        else server.respond(res, [...results], 200);
       }
     });
   }
@@ -323,7 +323,7 @@ server.enableRoute({
         server.respond(res, {
           message: 'Nothing found matching request'
         });
-      } else server.respond(res, results, 200);
+      } else server.respond(res, [...results], 200);
     }
   }
 });
@@ -338,7 +338,7 @@ server.enableRoute({
     const options = { orderby: '`rank` ASC', search };
     dbro.request('richlist', options, (error, results) => {
       if (error) server.respond(res, Server.Error(error), 500);
-      else server.respond(res, results, 200);
+      else server.respond(res, [...results], 200);
     });
   }
 });
@@ -355,7 +355,7 @@ server.enableRoute({
     const options = { orderby: '`created` DESC', search };
     dbro.request('transaction', options, (error, results) => {
       if (error) server.respond(res, Server.Error(error), 500);
-      else server.respond(res, results, 200);
+      else server.respond(res, [...results], 200);
     });
   }
 });
