@@ -60,9 +60,11 @@ server.enableRoute({
   handler: async (res) => {
     const start = Date.now();
     Promise.allSettled([
-      dbro.promise().query(
-        "SELECT `MEMBER_HOST` as 'members'" +
-        ' FROM `performance_schema`.`replication_group_members`'),
+      dbro.promise().query({
+        sql: "SELECT `MEMBER_HOST` as 'members'" +
+          ' FROM `performance_schema`.`replication_group_members`',
+        rowsAsArray: true
+      }),
       dbro.promise().query(
         "SELECT `TABLE_NAME` as 'name', `TABLE_ROWS` as 'count'," +
         " `DATA_LENGTH` as 'size', `INDEX_LENGTH` as 'indexed' FROM" +
