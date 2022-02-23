@@ -235,7 +235,7 @@ class BlockScanner extends Watcher {
               try {
                 // create temporary table for bulk data
                 await connection.query('CREATE TEMPORARY TABLE ' + table +
-                  ' SELECT * FROM `mochimo`.`balance` LIMIT 0');
+                  ' SELECT * FROM `mochimo`.`neogen` LIMIT 0');
                 // stream neogen data as CSV to temp table
                 const sql =
                   'LOAD DATA LOCAL INFILE "stream" INTO TABLE ' + table +
@@ -263,7 +263,7 @@ class BlockScanner extends Watcher {
                   ' as `rank` from ' + table + ' WHERE `balance` > 0');
                 // insert into balance table from temp table (IODKU)
                 await connection.query(
-                  'INSERT INTO `balance` SELECT `created`, `bnum`, `bhash`,' +
+                  'INSERT INTO `neogen` SELECT `created`, `bnum`, `bhash`,' +
                   ' `address`, `addressHash`, `tag`, `balance`, `delta`' +
                   ' from ' + table + ' WHERE delta != 0');
               } catch (error) {

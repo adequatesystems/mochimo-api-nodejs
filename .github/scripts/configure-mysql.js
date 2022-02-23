@@ -22,24 +22,12 @@ do {
   }
 } while (!shell.getSession());
 
-print('Creating database tables...\n\n');
+print('Setting global configuration...\n\n');
+shell.getSession().runSql('SET PERSIST local_infile = true');
+
+print('Creating databases and tables...\n\n');
 shell.getSession().runSql('CREATE DATABASE `mochimo`');
 shell.getSession().runSql('use `mochimo`');
-shell.getSession().runSql(
-  'CREATE TABLE `balance` (' +
-    '`created` DATETIME NOT NULL, ' +
-    '`bnum` CHAR(64) NOT NULL, ' +
-    '`bhash` CHAR(64) NOT NULL, ' +
-    '`address` CHAR(64) NOT NULL, ' +
-    '`addressHash` CHAR(64) NOT NULL, ' +
-    '`tag` CHAR(24) NOT NULL, ' +
-    '`balance` BIGINT UNSIGNED NOT NULL, ' +
-    '`delta` BIGINT NOT NULL, ' +
-    'PRIMARY KEY (`bnum`, `bhash`, `addressHash`), ' +
-    'INDEX idx_tag(`tag`), ' +
-    'INDEX idx_balance(`balance`)' +
-  ')'
-);
 shell.getSession().runSql(
   'CREATE TABLE `block` (' +
     '`created` DATETIME NOT NULL, ' +
@@ -61,6 +49,21 @@ shell.getSession().runSql(
     'PRIMARY KEY (`bnum`, `bhash`), ' +
     'INDEX idx_created(`created`), ' +
     'INDEX idx_started(`started`) ' +
+  ')'
+);
+shell.getSession().runSql(
+  'CREATE TABLE `neogen` (' +
+    '`created` DATETIME NOT NULL, ' +
+    '`bnum` BIGINT UNSIGNED NOT NULL, ' +
+    '`bhash` CHAR(64) NOT NULL, ' +
+    '`address` CHAR(64) NOT NULL, ' +
+    '`addressHash` CHAR(64) NOT NULL, ' +
+    '`tag` CHAR(24) NOT NULL, ' +
+    '`balance` BIGINT UNSIGNED NOT NULL, ' +
+    '`delta` BIGINT NOT NULL, ' +
+    'PRIMARY KEY (`bnum`, `bhash`, `addressHash`), ' +
+    'INDEX idx_tag(`tag`), ' +
+    'INDEX idx_balance(`balance`)' +
   ')'
 );
 shell.getSession().runSql(
@@ -112,9 +115,15 @@ print('Password accepted\n\n');
 shell.getSession().runSql(
   "CREATE USER 'mochimo'@'%' IDENTIFIED by '" + password + "'");
 shell.getSession().runSql(
-  "GRANT INSERT, SELECT, UPDATE ON mochimo.* TO 'mochimo'@'%'");
+  'GRANT SELECT ON `performance_schema`.`replication_group_members`' +
+  " TO 'mochimo'@'%'");
 shell.getSession().runSql(
-  "GRANT DELETE ON `mochimo`.`balance` TO 'mochimo'@'%'");
+  "GRANT CREATE TEMPORARY TABLES ON `mochimo`.* TO 'mochimo'@'%'");
+shell.getSession().runSql(
+  "GRANT INSERT, SELECT, ON `mochimo`.* TO 'mochimo'@'%'");
 shell.getSession().runSql(
   "GRANT DELETE ON `mochimo`.`richlist` TO 'mochimo'@'%'");
-shell.getSession().runSql('FLUSH PRIVILEGES');
+shell.getSession().runSql(
+  "GRANT UPDATE ON `mochimo`.`transaction` TO 'mochimo'@'%'");
+shell.getSession().runSql(
+  'FLUSH PRIVILEGES');
