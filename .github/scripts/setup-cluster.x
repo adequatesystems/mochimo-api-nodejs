@@ -56,6 +56,15 @@ echo
 mysqlrouter --user root --bootstrap icadmin@localhost:3306 \
   --conf-use-sockets --account icrouter
 
+cat <<EOF >>/etc/mysqlrouter
+[routing:localfirst_ro]
+bind_address=0.0.0.0
+bind_port=6445
+destinations=localhost:3306,localhost:6447
+routing_strategy=first-available
+
+EOF
+
 # install mysqlrouter service
 cat <<EOF >/etc/systemd/system/mysqlrouter.service
 [Unit]
@@ -71,8 +80,8 @@ systemctl enable mysqlrouter.service
 systemctl restart mysqlrouter.service
 
 # update environment vars with router ports
+echo "DBPORT_RO=6445" >> .env
 echo "DBPORT_RW=6446" >> .env
-echo "DBPORT_RO=6447" >> .env
 
 # restart api
 npm install && npm restart
