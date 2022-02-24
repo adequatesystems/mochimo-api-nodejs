@@ -206,11 +206,12 @@ class BlockScanner extends Watcher {
               ];
               // load previous neogen data
               for (const lentry of pngblock.ledger) {
-                let { address } = lentry;
-                const { balance, tag } = lentry;
+                let { address, balance } = lentry;
+                const { tag } = lentry;
                 const id = createHash('sha256').update(address).digest('hex');
                 const delta = NormalizeBigInt(-(balance), true);
                 address = address.slice(0, 64);
+                balance = 0n; // assume empty
                 ngdata[id] = {
                   ...leinfo, address, addressHash: id, tag, balance, delta
                 };
@@ -220,8 +221,8 @@ class BlockScanner extends Watcher {
                 let { address } = lentry;
                 const { balance, tag } = lentry;
                 const id = createHash('sha256').update(address).digest('hex');
-                const pbalance = id in ngdata ? ngdata[id].balance : 0n;
-                const delta = NormalizeBigInt(balance - pbalance, true);
+                const pdelta = id in ngdata ? ngdata[id].delta : 0n;
+                const delta = NormalizeBigInt(balance + pdelta, true);
                 address = address.slice(0, 64);
                 ngdata[id] = {
                   ...leinfo, address, addressHash: id, tag, balance, delta
