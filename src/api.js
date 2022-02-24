@@ -352,7 +352,7 @@ server.enableRoute({
     // apply txid to search parameters
     if (txid) search = (search ? search + '&' : '?') + `txid=${txid}*`;
     // perform transaction search
-    const options = { orderby: '`created` DESC', search };
+    const options = { orderby: '`bnum` DESC', search };
     dbro.request('transaction', options, (error, results) => {
       if (error) server.respond(res, Server.Error(error), 500);
       else server.respond(res, [...results], 200);
