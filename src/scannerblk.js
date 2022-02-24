@@ -222,7 +222,7 @@ class BlockScanner extends Watcher {
                 const { balance, tag } = lentry;
                 const id = createHash('sha256').update(address).digest('hex');
                 const pdelta = id in ngdata ? ngdata[id].delta : 0n;
-                const delta = NormalizeBigInt(balance + pdelta, true);
+                const delta = NormalizeBigInt(balance + BigInt(pdelta), true);
                 address = address.slice(0, 64);
                 ngdata[id] = {
                   ...leinfo, address, addressHash: id, tag, balance, delta
