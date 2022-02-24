@@ -60,7 +60,7 @@ server.enableRoute({
   handler: async (res) => {
     Promise.allSettled([
       dbro.promise().query(
-        "SELECT `MEMBER_HOST` as 'member'" +
+        "SELECT `MEMBER_HOST` as 'member', `MEMBER_STATE` as 'state'" +
         ' FROM `performance_schema`.`replication_group_members`'),
       dbro.promise().query(
         "SELECT `TABLE_NAME` as 'name', `TABLE_ROWS` as 'count'," +
@@ -71,10 +71,10 @@ server.enableRoute({
       const [tables] = results[1].value || [results[1].reason];
       server.respond(res, {
         status: 'OK',
-        members: members?.reduce((mbrs, { member }) => {
-          mbrs.push(member);
+        members: members?.reduce((mbrs, { member, state }) => {
+          mbrs[member] = state;
           return mbrs;
-        }, []),
+        }, {}),
         tables: tables?.reduce((tbls, { name, count, size, indexed }) => {
           return Object.assign(tbls, { [name]: { count, size, indexed } });
         }, {})
