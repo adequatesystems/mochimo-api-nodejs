@@ -72,7 +72,7 @@ class Server {
       events.forEach((event) => {
         this.eventConnections[event] = new Set();
         // send heartbeat every 15 seconds
-        setTimeout(() => this.stream(null, event), 15000);
+        setTimeout(this.stream.bind(this, null, event), 15000);
       });
     }
     // add stream route
