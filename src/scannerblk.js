@@ -5,6 +5,8 @@
  */
 
 /* global BigInt */
+const sha256 = (update) => createHash('sha256').update(update).digest('hex');
+const isTagged = (tag) => Boolean(['00', '42'].includes(tag.slice(0, 2)));
 const MaxBigInt = (...args) => args.reduce((m, v) => m >= v ? m : v);
 const MinBigInt = (...args) => args.reduce((m, v) => m <= v ? m : v);
 const NormalizeBigInt = (bigint, signed) => {
@@ -208,24 +210,26 @@ class BlockScanner extends Watcher {
               for (const lentry of pngblock.ledger) {
                 let { address, balance } = lentry;
                 const { tag } = lentry;
-                const id = createHash('sha256').update(address).digest('hex');
+                const addressHash = sha256(address);
+                const id = isTagged(tag) ? tag : addressHash;
                 const delta = NormalizeBigInt(-(balance), true);
                 address = address.slice(0, 64);
                 balance = 0n; // assume empty
                 ngdata[id] = {
-                  ...leinfo, address, addressHash: id, tag, balance, delta
+                  ...leinfo, address, addressHash, tag, balance, delta
                 };
               }
               // load latest neogen data
               for (const lentry of block.ledger) {
                 let { address } = lentry;
                 const { balance, tag } = lentry;
-                const id = createHash('sha256').update(address).digest('hex');
+                const addressHash = sha256(address);
+                const id = isTagged(tag) ? tag : addressHash;
                 const pdelta = id in ngdata ? ngdata[id].delta : 0n;
                 const delta = NormalizeBigInt(balance + BigInt(pdelta), true);
                 address = address.slice(0, 64);
                 ngdata[id] = {
-                  ...leinfo, address, addressHash: id, tag, balance, delta
+                  ...leinfo, address, addressHash, tag, balance, delta
                 };
               }
               // define temporary table name
