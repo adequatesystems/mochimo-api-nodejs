@@ -20,6 +20,7 @@ const stdOpts = {
 
 function requestHandler (table, options, callback) {
   let { limit, offset, orderby, search, select } = options;
+  let groupCondition = null;
   let nConditions = 0;
   let where = '';
   // consume search and place in `where`
@@ -57,8 +58,14 @@ function requestHandler (table, options, callback) {
               }
               // apply condition extension and modified condition
               if (nConditions++) {
-                if (search.charAt(0) === '&') where += ' AND ';
-                if (search.charAt(0) === '|') where += ' OR ';
+                // encase existing conditions on groupCondition change
+                if (groupCondition && groupCondition !== search.charAt(0)) {
+                  where = `( ${where} )`;
+                }
+                groupCondition = search.charAt(0);
+                // apply condition extension
+                if (groupCondition === '&') where += ' AND ';
+                if (groupCondition === '|') where += ' OR ';
               }
               where += `\`${column}\` ${comparitor} '${value}'`;
           }
