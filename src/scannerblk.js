@@ -5,8 +5,6 @@
  */
 
 /* global BigInt */
-const sha256 = (update) => createHash('sha256').update(update).digest('hex');
-const isTagged = (tag) => Boolean(['00', '42'].includes(tag.slice(0, 2)));
 const MaxBigInt = (...args) => args.reduce((m, v) => m >= v ? m : v);
 const MinBigInt = (...args) => args.reduce((m, v) => m <= v ? m : v);
 const NormalizeBigInt = (bigint, signed) => {
@@ -29,10 +27,9 @@ const mochimo = require('mochimo');
 const path = require('path');
 const fs = require('fs');
 
-const farchive = (bnum, bhash) => {
-  return `b${asUint64String(bnum)}x${bhash.slice(0, 8)}.bc`;
-};
-
+const sha256 = (data) => createHash('sha256').update(data).digest('hex');
+const isTagged = (tag) => Boolean(['00', '42'].includes(tag.slice(0, 2)));
+const farchive = (n, h) => `b${asUint64String(n)}x${h.slice(0, 8)}.bc`;
 const asUint64String = (bigint) => {
   return BigInt.asUintN(64, BigInt(bigint)).toString(16).padStart(16, '0');
 };
@@ -258,14 +255,12 @@ class BlockScanner extends Watcher {
                 };
                 await connection.query({ sql, infileStreamFactory });
                 // (pre)DELETE un-needed ranks from richlist
-                await connection.query(
-                  'DELETE FROM `richlist` WHERE `rank` >' +
-                  ' (SELECT count(*) FROM ' + table + ' WHERE `balance` > 0)');
+                await connection.query('DELETE FROM `richlist`');
                 // REPLACE into richlist table from temp (add RANK())
                 await connection.query(
                   'REPLACE INTO `richlist` SELECT `address`, `addressHash`,' +
                   ' `tag`, `balance`, RANK() OVER(ORDER BY `balance` DESC)' +
-                  ' as `rank` from ' + table + ' WHERE `balance` > 0');
+                  ' as `rank` from ' + table);
                 // insert into balance table from temp table (IODKU)
                 await connection.query(
                   'INSERT INTO `neogen` SELECT `created`, `bnum`, `bhash`,' +

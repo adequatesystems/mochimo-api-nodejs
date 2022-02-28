@@ -72,7 +72,8 @@ shell.getSession().runSql(
     '`addressHash` CHAR(64) NOT NULL, ' +
     '`tag` CHAR(24) NOT NULL, ' +
     '`balance` BIGINT UNSIGNED NOT NULL, ' +
-    '`rank` BIGINT UNSIGNED NOT NULL PRIMARY KEY ' +
+    '`rank` BIGINT UNSIGNED NOT NULL, ' +
+    'PRIMARY KEY (`rank`, `addressHash`)' +
   ')'
 );
 shell.getSession().runSql(
