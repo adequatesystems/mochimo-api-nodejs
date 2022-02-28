@@ -28,7 +28,7 @@ const path = require('path');
 const fs = require('fs');
 
 const sha256 = (data) => createHash('sha256').update(data).digest('hex');
-const isTagged = (tag) => Boolean(['00', '42'].includes(tag.slice(0, 2)));
+const isTagged = (tag) => Boolean(!['00', '42'].includes(tag.slice(0, 2)));
 const farchive = (n, h) => `b${asUint64String(n)}x${h.slice(0, 8)}.bc`;
 const asUint64String = (bigint) => {
   return BigInt.asUintN(64, BigInt(bigint)).toString(16).padStart(16, '0');
