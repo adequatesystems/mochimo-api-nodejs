@@ -41,6 +41,7 @@ mysqlsh -f ~/mochimo-api-nodejs/.github/scripts/configure-mysql.js
 rm -f ~/mochimo-api-nodejs/.env
 echo
 echo "  Please enter your Mochimo API env vars (as necessary)..."
+echo "NODEIP=$(hostname -I)" >> ~/mochimo-api-nodejs/.env
 echo
 read -s -p "MySQL password for 'mochimo@localhost': " DBPASS
 echo "DBPASS=$DBPASS" >> ~/mochimo-api-nodejs/.env
