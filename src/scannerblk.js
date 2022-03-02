@@ -101,12 +101,13 @@ class BlockScanner extends Watcher {
       // edit filename for archives
       filename = farchive(bnum, bhash);
       // build JSON block data for INSERT
+      const time = stime - time0;
       const created = new Date(stime * 1000).toISOString()
         .replace(/(.*)T(.*)\..*/, '$1 $2');
-      const started = new Date(time0 * 1000).toISOString()
-        .replace(/(.*)T(.*)\..*/, '$1 $2');
-      const blockJSON = { created, started, ...block.toJSON(true) };
-      delete blockJSON.stime; delete blockJSON.time0;
+      const blockJSON = { created, time, ...block.toJSON(true) };
+      blockJSON.count = blockJSON.tcount || blockJSON.lcount;
+      delete blockJSON.stime;
+      delete blockJSON.time0;
       // normalize amount
       if (blockJSON.amount) {
         blockJSON.amount = NormalizeBigInt(blockJSON.amount);
@@ -254,18 +255,23 @@ class BlockScanner extends Watcher {
                   })()).pipe(new PassThrough());
                 };
                 await connection.query({ sql, infileStreamFactory });
-                // (pre)DELETE un-needed ranks from richlist
-                await connection.query('DELETE FROM `richlist`');
-                // REPLACE into richlist table from temp (add RANK())
-                await connection.query(
-                  'REPLACE INTO `richlist` SELECT `address`, `addressHash`,' +
-                  ' `tag`, `balance`, RANK() OVER(ORDER BY `balance` DESC)' +
-                  ' as `rank` from ' + table);
                 // insert into balance table from temp table (IODKU)
                 await connection.query(
                   'INSERT INTO `neogen` SELECT `created`, `bnum`, `bhash`,' +
                   ' `address`, `addressHash`, `tag`, `balance`, `delta`' +
                   ' from ' + table + ' WHERE delta != 0');
+                // INSERT into richlist table from temp (add RANK()) (IODKU)
+                await connection.query(
+                  'INSERT INTO `richlist` SELECT `address`, `addressHash`,' +
+                  ' `tag`, `balance`, RANK() OVER(ORDER BY `balance` DESC)' +
+                  ' as `rank` from ' + table + ' ON DUPLICATE KEY UPDATE ' +
+                  ' `balance` = VALUES(`balance`), `tag` = VALUES(`tag`),' +
+                  ' `addressHash` = VALUES(`addressHash`), ' +
+                  ' `address` = VALUES(`address`)');
+                // DELETE remaining from richlist items (if any)
+                await connection.query(
+                  'DELETE FROM `richlist` WHERE `rank` > (' +
+                  'SELECT COUNT(*) from ' + table + ')');
               } catch (error) {
                 console.error(this.name, '// NEOGENESIS', error);
               } finally {

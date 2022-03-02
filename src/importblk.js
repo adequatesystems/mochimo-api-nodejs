@@ -34,6 +34,7 @@ if (argv.length < 3) {
 
 const blkimporter = new BlockScanner({
   db,
+  connectionLimit: 100,
   target: argv[2],
   emit: (json) => {
     console.log('Block#', json.bnum, 'accepted');
