@@ -106,6 +106,8 @@ class BlockScanner extends Watcher {
         .replace(/(.*)T(.*)\..*/, '$1 $2');
       const blockJSON = { created, time, ...block.toJSON(true) };
       blockJSON.count = blockJSON.tcount || blockJSON.lcount;
+      delete blockJSON.tcount;
+      delete blockJSON.lcount;
       delete blockJSON.stime;
       delete blockJSON.time0;
       // normalize amount
