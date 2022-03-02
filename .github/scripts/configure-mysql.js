@@ -92,7 +92,7 @@ shell.getSession().runSql(
     '`balance` BIGINT UNSIGNED NOT NULL, ' +
     '`delta` BIGINT NOT NULL, ' +
     '`id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, ' +
-    'CONSTRAINT uid_address UNIQUE (`bnum`, `bhash`), ' +
+    'CONSTRAINT uid_address UNIQUE (`bnum`, `bhash`, `addressHash`), ' +
     'INDEX idx_bnum(`bnum` DESC), ' +
     'INDEX idx_bhash(`bhash`), ' +
     'INDEX idx_address(`address`), ' +
@@ -111,7 +111,7 @@ CREATE TABLE `neogen` (
   `balance` BIGINT UNSIGNED NOT NULL,
   `delta` BIGINT NOT NULL,
   `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  CONSTRAINT uid_address UNIQUE (`bnum`, `bhash`),
+  CONSTRAINT uid_address UNIQUE (`bnum`, `bhash`, `addressHash`),
   INDEX idx_bnum(`bnum` DESC),
   INDEX idx_bhash(`bhash`),
   INDEX idx_address(`address`),

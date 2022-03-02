@@ -259,9 +259,11 @@ class BlockScanner extends Watcher {
                 await connection.query({ sql, infileStreamFactory });
                 // insert into balance table from temp table (IODKU)
                 await connection.query(
-                  'INSERT INTO `neogen` SELECT `created`, `bnum`, `bhash`,' +
-                  ' `address`, `addressHash`, `tag`, `balance`, `delta`' +
-                  ' from ' + table + ' WHERE delta != 0');
+                  'INSERT INTO `neogen` (`created`, `bnum`, `bhash`,' +
+                  ' `address`, `addressHash`, `tag`, `balance`, `delta`)' +
+                  ' SELECT `created`, `bnum`, `bhash`, `address`,' +
+                  ' `addressHash`, `tag`, `balance`, `delta`' +
+                  ' from ' + table + ' WHERE `delta` != 0');
                 // INSERT into richlist table from temp (add RANK()) (IODKU)
                 await connection.query(
                   'INSERT INTO `richlist` SELECT `address`, `addressHash`,' +
