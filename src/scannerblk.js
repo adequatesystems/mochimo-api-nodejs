@@ -266,12 +266,12 @@ class BlockScanner extends Watcher {
                   ' from ' + table + ' WHERE `delta` != 0');
                 // INSERT into richlist table from temp (add RANK()) (IODKU)
                 await connection.query(
-                  'INSERT INTO `richlist` SELECT `address`, `addressHash`,' +
-                  ' `tag`, `balance`, RANK() OVER(ORDER BY `balance` DESC)' +
-                  ' as `rank` from ' + table + ' ON DUPLICATE KEY UPDATE ' +
+                  'INSERT INTO `richlist` SELECT `address`,' +
+                  ' `addressHash`, `tag`, `balance`, row_number()' +
+                  ' OVER(ORDER BY `balance` DESC) as `rank` from ' + table +
+                  ' ON DUPLICATE KEY UPDATE `address` = VALUES(`address`)' +
                   ' `balance` = VALUES(`balance`), `tag` = VALUES(`tag`),' +
-                  ' `addressHash` = VALUES(`addressHash`), ' +
-                  ' `address` = VALUES(`address`)');
+                  ' `addressHash` = VALUES(`addressHash`)');
                 // DELETE remaining from richlist items (if any)
                 await connection.query(
                   'DELETE FROM `richlist` WHERE `rank` > (' +
