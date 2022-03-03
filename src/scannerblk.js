@@ -342,7 +342,12 @@ class BlockScanner extends Watcher {
   }
 
   async writeBlock (data, fname, dir) {
+    const targetpath = path.join(dir, fname);
     await fs.promises.mkdir(dir, { recursive: true });
-    await fs.promises.writeFile(path.join(dir, fname), data);
+    try {
+      await fs.promises.access(targetpath);
+    } catch (ignore) {
+      await fs.promises.writeFile(targetpath, data);
+    }
   }
 };
