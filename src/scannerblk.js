@@ -269,7 +269,7 @@ class BlockScanner extends Watcher {
                   'INSERT INTO `richlist` SELECT `address`,' +
                   ' `addressHash`, `tag`, `balance`, row_number()' +
                   ' OVER(ORDER BY `balance` DESC) as `rank` from ' + table +
-                  ' ON DUPLICATE KEY UPDATE `address` = VALUES(`address`)' +
+                  ' ON DUPLICATE KEY UPDATE `address` = VALUES(`address`),' +
                   ' `balance` = VALUES(`balance`), `tag` = VALUES(`tag`),' +
                   ' `addressHash` = VALUES(`addressHash`)');
                 // DELETE remaining from richlist items (if any)
