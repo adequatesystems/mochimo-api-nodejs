@@ -32,13 +32,13 @@ if (argv.length < 3) {
   process.exit(1);
 }
 
+const options = JSON.parse(argv[2]);
+const connectionLimit = options.connectionLimit || 100;
+const target = options.target || 'archive';
+const verbose = options.verbose || false;
+
 const blkimporter = new BlockScanner({
-  db,
-  connectionLimit: 100,
-  target: argv[2],
-  emit: (json) => {
-    console.log('Block#', json.bnum, 'accepted');
-  }
+  db, connectionLimit, target, verbose
 });
 
 const cleanup = (e, src) => {
