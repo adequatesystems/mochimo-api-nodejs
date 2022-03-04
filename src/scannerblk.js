@@ -50,7 +50,7 @@ class BlockScanner extends Watcher {
     super({ name: 'BLKSCANNER', target, scanOnly });
     // apply instance parameters
     Object.assign(this, {
-      archivedir, backupdir, db, emit, name, scanOnly, target
+      archivedir, backupdir, db, emit, name, scanOnly, target, verbose
     });
     this.dbfail = false;
     this.processing = false;
