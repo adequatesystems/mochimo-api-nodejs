@@ -37,7 +37,8 @@ const asUint64String = (bigint) => {
 /* Block Scanner */
 module.exports =
 class BlockScanner extends Watcher {
-  constructor ({ archivedir, backupdir, db, emit, name, scanOnly, target }) {
+  constructor
+  ({ archivedir, backupdir, db, emit, name, scanOnly, target, verbose }) {
     // apply default parameters
     archivedir = archivedir || path.join(process.cwd(), 'archive');
     backupdir = backupdir || path.join(process.cwd(), 'backup');
@@ -297,6 +298,8 @@ class BlockScanner extends Watcher {
           }
         }
       }
+      // report
+      if (this.verbose) console.log(filename);
       // check recovery flag
       if (this.dbfail) {
         this.dbfail = false;
@@ -319,7 +322,7 @@ class BlockScanner extends Watcher {
             console.log(this.name, '// DB FAILURE MODE ACTIVATED');
             this.dbfail = true;
           }
-        }
+        } else if (this.verbose) console.log(filename, 'skipped...');
       } else
       // ignore file errors that don't or no longer exist
       if (error.code !== 'ENOENT') {

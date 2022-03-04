@@ -34,11 +34,12 @@ if (argv.length < 3) {
 
 const options = JSON.parse(argv[2]);
 const connectionLimit = options.connectionLimit || 100;
+const scanOnly = options.scanOnly || true;
 const target = options.target || 'archive';
 const verbose = options.verbose || false;
 
 const blkimporter = new BlockScanner({
-  db, connectionLimit, target, verbose
+  db, connectionLimit, scanOnly, target, verbose
 });
 
 const cleanup = (e, src) => {
