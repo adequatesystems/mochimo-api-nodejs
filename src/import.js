@@ -27,12 +27,7 @@ const db = new DB({
   port: process.env.DBPORT_RW || process.env.DBPORT || 3306
 });
 
-if (argv.length < 3) {
-  console.error('missing import directory argument, exiting...');
-  process.exit(1);
-}
-
-const options = JSON.parse(argv[2]);
+const options = argv.length > 2 ? JSON.parse(argv[2]) : {};
 const connectionLimit = options.connectionLimit || 100;
 const scanOnly = options.scanOnly || true;
 const target = options.target || 'archive';
