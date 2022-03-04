@@ -36,7 +36,7 @@ const options = JSON.parse(argv[2]);
 const connectionLimit = options.connectionLimit || 100;
 const scanOnly = options.scanOnly || true;
 const target = options.target || 'archive';
-const verbose = options.verbose || false;
+const verbose = options.verbose || true;
 
 const blkimporter = new BlockScanner({
   db, connectionLimit, scanOnly, target, verbose
