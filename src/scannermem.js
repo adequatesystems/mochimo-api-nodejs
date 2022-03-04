@@ -5,6 +5,7 @@
  */
 
 /* modules and utilities */
+const { sha256 } = require('./apiUtils');
 const Watcher = require('./watcher');
 const mochimo = require('mochimo');
 const fs = require('fs');
@@ -57,6 +58,7 @@ class MempoolScanner extends Watcher {
           const txebuffer = result.buffer.slice(position, position + length);
           const txentry = new mochimo.TXEntry(txebuffer);
           const txjson = txentry.toJSON(true);
+          txjson.txhash = sha256(txentry);
           // insert "unconfirmed" transaction to db
           if (this.db) {
             this.db.query('INSERT INTO `transaction` SET ?', txjson,

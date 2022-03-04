@@ -5,6 +5,7 @@
  */
 
 /* global BigInt */
+const { createHash } = require('crypto');
 const https = require('https');
 
 const Utils = {
@@ -113,7 +114,8 @@ const Utils = {
     // return array for convenience
     return array;
   },
-  searchAppend: (search, str) => (search ? search + '&' : '?') + str
+  searchAppend: (search, str) => (search ? search + '&' : '?') + str,
+  sha256: (data) => createHash('sha256').update(data).digest('hex')
 };
 
 module.exports = Utils;

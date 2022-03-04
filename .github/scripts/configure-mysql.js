@@ -33,15 +33,15 @@ shell.getSession().runSql(
   'CREATE TABLE `block` (' +
     '`created` DATETIME NOT NULL, ' +
     '`time` INT NOT NULL, ' +
-    '`type` VARCHAR(12) NOT NULL, ' +
+    '`type` VARCHAR(12) CHARACTER SET `ascii` NOT NULL, ' +
     '`size` BIGINT UNSIGNED NOT NULL, ' +
     '`difficulty` INT UNSIGNED NOT NULL, ' +
     '`bnum` BIGINT UNSIGNED NOT NULL, ' +
-    '`bhash` CHAR(64) NOT NULL, ' +
-    '`phash` CHAR(64) NOT NULL, ' +
-    '`mroot` CHAR(64), ' +
-    '`nonce` CHAR(64), ' +
-    '`maddr` CHAR(64), ' +
+    '`bhash` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
+    '`phash` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
+    '`mroot` CHAR(64) CHARACTER SET `ascii`, ' +
+    '`nonce` CHAR(64) CHARACTER SET `ascii`, ' +
+    '`maddr` CHAR(64) CHARACTER SET `ascii`, ' +
     '`mreward` BIGINT UNSIGNED, ' +
     '`mfee` BIGINT UNSIGNED, ' +
     '`amount` BIGINT UNSIGNED, ' +
@@ -56,17 +56,17 @@ shell.getSession().runSql(
   ')'
 );
 shell.getSession().runSql(
-  'CREATE TABLE `neogen` (' +
+  'CREATE TABLE `ledger` (' +
     '`created` DATETIME NOT NULL, ' +
     '`bnum` BIGINT UNSIGNED NOT NULL, ' +
-    '`bhash` CHAR(64) NOT NULL, ' +
-    '`address` CHAR(64) NOT NULL, ' +
-    '`addressHash` CHAR(64) NOT NULL, ' +
-    '`tag` CHAR(24) NOT NULL, ' +
+    '`bhash` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
+    '`address` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
+    '`addressHash` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
+    '`tag` CHAR(24) CHARACTER SET `ascii` NOT NULL, ' +
     '`balance` BIGINT UNSIGNED NOT NULL, ' +
     '`delta` BIGINT NOT NULL, ' +
     '`id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, ' +
-    'CONSTRAINT uid_address UNIQUE (`bnum`, `bhash`, `addressHash`), ' +
+    'CONSTRAINT uid_ledger UNIQUE (`bnum`, `bhash`, `addressHash`), ' +
     'INDEX idx_bnum(`bnum` DESC), ' +
     'INDEX idx_bhash(`bhash`), ' +
     'INDEX idx_address(`address`), ' +
@@ -76,9 +76,9 @@ shell.getSession().runSql(
 );
 shell.getSession().runSql(
   'CREATE TABLE `richlist` (' +
-    '`address` CHAR(64) NOT NULL, ' +
-    '`addressHash` CHAR(64) NOT NULL, ' +
-    '`tag` CHAR(24) NOT NULL, ' +
+    '`address` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
+    '`addressHash` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
+    '`tag` CHAR(24) CHARACTER SET `ascii` NOT NULL, ' +
     '`balance` BIGINT UNSIGNED NOT NULL, ' +
     '`rank` BIGINT UNSIGNED NOT NULL PRIMARY KEY, ' +
     'INDEX idx_address(`address`), ' +
@@ -91,20 +91,21 @@ shell.getSession().runSql(
     '`created` DATETIME NOT NULL DEFAULT (UTC_TIMESTAMP), ' +
     '`confirmed` DATETIME, ' +
     '`bnum` BIGINT UNSIGNED, ' +
-    '`bhash` CHAR(64), ' +
-    '`txid` CHAR(64) NOT NULL, ' +
-    '`txsig` CHAR(64) NOT NULL, ' +
-    '`srcaddr` CHAR(64) NOT NULL, ' +
-    '`srctag` CHAR(24) NOT NULL, ' +
-    '`dstaddr` CHAR(64) NOT NULL, ' +
-    '`dsttag` CHAR(24) NOT NULL, ' +
-    '`chgaddr` CHAR(64) NOT NULL, ' +
-    '`chgtag` CHAR(24) NOT NULL, ' +
+    '`bhash` CHAR(64) CHARACTER SET `ascii`, ' +
+    '`txid` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
+    '`txsig` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
+    '`txhash` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
+    '`srcaddr` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
+    '`srctag` CHAR(24) CHARACTER SET `ascii` NOT NULL, ' +
+    '`dstaddr` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
+    '`dsttag` CHAR(24) CHARACTER SET `ascii` NOT NULL, ' +
+    '`chgaddr` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
+    '`chgtag` CHAR(24) CHARACTER SET `ascii` NOT NULL, ' +
     '`sendtotal` BIGINT UNSIGNED NOT NULL, ' +
     '`changetotal` BIGINT UNSIGNED NOT NULL, ' +
     '`txfee` BIGINT UNSIGNED NOT NULL, ' +
     '`id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, ' +
-    'CONSTRAINT uid_transaction UNIQUE (`txid`, `bhash`), ' +
+    'CONSTRAINT uid_transaction UNIQUE (`txhash`), ' +
     'INDEX idx_bnum(`bnum` DESC), ' +
     'INDEX idx_txid (`txid`), ' +
     'INDEX idx_srcaddr(`srcaddr`), ' +
@@ -137,9 +138,9 @@ shell.getSession().runSql(
 shell.getSession().runSql(
   "GRANT CREATE TEMPORARY TABLES ON `mochimo`.* TO 'mochimo'@'%'");
 shell.getSession().runSql(
-  "GRANT INSERT, SELECT, ON `mochimo`.* TO 'mochimo'@'%'");
+  "GRANT INSERT, SELECT ON `mochimo`.* TO 'mochimo'@'%'");
 shell.getSession().runSql(
-  "GRANT DELETE ON `mochimo`.`richlist` TO 'mochimo'@'%'");
+  "GRANT DELETE, UPDATE ON `mochimo`.`richlist` TO 'mochimo'@'%'");
 shell.getSession().runSql(
   "GRANT UPDATE ON `mochimo`.`transaction` TO 'mochimo'@'%'");
 shell.getSession().runSql(

@@ -124,7 +124,9 @@ class BlockScanner extends Watcher {
         // declare additional parameters for trasactions
         const txinfo = { created, confirmed: created, bnum, bhash };
         const transactions = block.transactions.map((txentry) => {
-          return { ...txinfo, ...txentry.toJSON(true) };
+          const txjson = txentry.toJSON(true);
+          txjson.txhash = sha256(txentry);
+          return { ...txinfo, ...txjson };
         });
         // define temporary table name
         const table = '`~txs' + bhash.slice(0, 8) + '`';
@@ -151,7 +153,13 @@ class BlockScanner extends Watcher {
           await connection.query({ sql, infileStreamFactory });
           // insert into transaction table with temp table (IODKU)
           await connection.query(
-            'INSERT INTO `transaction` SELECT * from ' + table +
+            'INSERT INTO `transaction` (`created`, `confirmed`, `bnum`,' +
+            ' `bhash`, `txid`, `txsig`, `txhash`, `srcaddr`, `srctag`,' +
+            ' `dstaddr`, `dsttag`, `chgaddr`, `chgtag`, `sendtotal`,' +
+            ' `changetotal`, `txfee`) SELECT `created`, `confirmed`,' +
+            ' `bnum`, `bhash`, `txid`, `txsig`, `txhash`, `srcaddr`,' +
+            ' `srctag`, `dstaddr`, `dsttag`, `chgaddr`, `chgtag`,' +
+            ' `sendtotal`, `changetotal`, `txfee` from ' + table +
             ' ON DUPLICATE KEY UPDATE `confirmed` = VALUES(`confirmed`),' +
             ' `bnum` = VALUES(`bnum`), `bhash` = VALUES(`bhash`)');
         } catch (error) {
@@ -240,7 +248,7 @@ class BlockScanner extends Watcher {
               try {
                 // create temporary table for bulk data
                 await connection.query('CREATE TEMPORARY TABLE ' + table +
-                  ' SELECT * FROM `mochimo`.`neogen` LIMIT 0');
+                  ' SELECT * FROM `mochimo`.`ledger` LIMIT 0');
                 // stream neogen data as CSV to temp table
                 const sql =
                   'LOAD DATA LOCAL INFILE "stream" INTO TABLE ' + table +
@@ -259,7 +267,7 @@ class BlockScanner extends Watcher {
                 await connection.query({ sql, infileStreamFactory });
                 // insert into balance table from temp table (IODKU)
                 await connection.query(
-                  'INSERT INTO `neogen` (`created`, `bnum`, `bhash`,' +
+                  'INSERT INTO `ledger` (`created`, `bnum`, `bhash`,' +
                   ' `address`, `addressHash`, `tag`, `balance`, `delta`)' +
                   ' SELECT `created`, `bnum`, `bhash`, `address`,' +
                   ' `addressHash`, `tag`, `balance`, `delta`' +
@@ -270,8 +278,8 @@ class BlockScanner extends Watcher {
                   ' `addressHash`, `tag`, `balance`, row_number()' +
                   ' OVER(ORDER BY `balance` DESC) as `rank` from ' + table +
                   ' ON DUPLICATE KEY UPDATE `address` = VALUES(`address`),' +
-                  ' `balance` = VALUES(`balance`), `tag` = VALUES(`tag`),' +
-                  ' `addressHash` = VALUES(`addressHash`)');
+                  ' `addressHash` = VALUES(`addressHash`),' +
+                  ' `balance` = VALUES(`balance`), `tag` = VALUES(`tag`)');
                 // DELETE remaining from richlist items (if any)
                 await connection.query(
                   'DELETE FROM `richlist` WHERE `rank` > (' +
