@@ -275,17 +275,17 @@ server.enableRoute({
 });
 server.enableRoute({
   method: 'GET',
-  path: /^\/neogen(?:\/(address|tag)\/([0-9a-f]+))?(?:\/)?$/i,
+  path: /^\/ledger(?:\/(address|tag)\/([0-9a-f]+))?(?:\/)?$/i,
   param: regexParams,
-  hint: '[BaseURL]/neogen/[<address|tag>/<addressParameter>]',
-  hintCheck: /neogen|delta|tag|address/gi,
+  hint: '[BaseURL]/ledger/[<address|tag>/<addressParameter>]',
+  hintCheck: /ledger|delta|tag|address/gi,
   handler: async (res, type, address, search) => {
     // apply type and address to search parameters
     if (['tag', 'address'].includes(type)) {
       search = searchAppend(search, `${type}=${address}*`);
     }
     const options = { orderby: '`bnum` DESC', search };
-    dbro.request('neogen', options, (error, results) => {
+    dbro.request('ledger', options, (error, results) => {
       // process results depending on request
       if (error) server.respond(res, Server.Error(error), 500);
       else server.respond(res, [...results], 200);
