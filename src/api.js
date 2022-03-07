@@ -134,7 +134,7 @@ server.enableRoute({
     const validParams = [
       'created', 'started', 'type', 'size', 'difficulty', 'bnum',
       'bhash', 'phash', 'mroot', 'nonce', 'maddr', 'mreward',
-      'mfee', 'amount', 'tcount', 'lcount'
+      'mfee', 'amount', 'count'
     ];
     if (bparam) {
       if (!validParams.includes(bparam)) {
@@ -249,15 +249,16 @@ server.enableRoute({
           hashrate: isNormal ? hashrate : null,
           hashrate_avg: round(hashes / hashesTimes),
           pseudorate_avg: round(pseudorate / nonNeogenesis),
-          tcount: block.tcount,
+          tcount: isNormal ? block.count : null,
           tcount_avg: round(transactions / nonNeogenesis),
-          tcountpsec: isNeogenesis ? null : round(block.tcount / blocktime),
+          tcountpsec: isNormal ? round(block.count / blocktime) : null,
           tcountpsec_avg: round(transactions / blockTimes),
           mfee: block.mfee,
-          txfees: (block.tcount * block.mfee) / 1e+9,
-          reward: isNeogenesis ? null : Number(blockReward(bnum)) / 1e+9,
-          mreward: ((block.tcount * block.mfee) / 1e+9) +
-            (isNeogenesis ? null : Number(blockReward(bnum)) / 1e+9),
+          txfees: isNormal ? (block.count * block.mfee) / 1e+9 : null,
+          reward: isNormal ? Number(blockReward(bnum)) / 1e+9 : null,
+          mreward: isNormal
+            ? ((block.count * block.mfee) + Number(blockReward(bnum))) / 1e+9
+            : null,
           circsupply: Number(circsupply) / 1e+9,
           totalsupply: Number(totalsupply) / 1e+9,
           maxsupply: Number(projectedSupply()) / 1e+9
