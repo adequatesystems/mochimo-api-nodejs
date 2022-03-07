@@ -184,7 +184,7 @@ class Server {
 
   async router (req, res) {
     try {
-      const requestURL = new URL(req.url, 'https://api.mochimap.com');
+      const { pathname, search } = new URL(req.url, 'https://api.example.com');
       const intent = { hint: '', detected: 0 };
       const params = [];
       let routeMatch;
@@ -192,21 +192,21 @@ class Server {
       for (const route of this.routes) {
         if (route.method !== req.method) continue;
         if (route.path instanceof RegExp) {
-          const pathMatch = requestURL.pathname.match(route.path);
+          const pathMatch = pathname.match(route.path);
           if (pathMatch) {
             // route matched, break loop
             routeMatch = route;
             params.push(...pathMatch.slice(1));
             break;
           }
-        } else if (route.path === requestURL.pathname) {
+        } else if (route.path === pathname) {
           // route matched, break loop
           routeMatch = route;
           break;
         }
         if (route.hint && route.hintCheck) {
           // no routes matched (yet), rank possible intentions
-          const intentCheck = requestURL.pathname.match(route.hintCheck);
+          const intentCheck = pathname.match(route.hintCheck);
           if (intentCheck && intentCheck.length > intent.detected) {
             intent.detected = intentCheck.length;
             intent.hint = route.hint;
@@ -217,8 +217,7 @@ class Server {
       if (!routeMatch) {
         return this.respond(res, {
           message: 'The request was not understood' +
-            (intent.detected ? `, did you mean ${intent.hint}?` : '. ') +
-            'Check https://github.com/chrisdigity/mochimap-api#api-endpoints'
+            (intent.detected ? `, did you mean ${intent.hint}?` : '. ')
         }, 400);
       }
       // ensure route is enabled, otherwise respond with 409
@@ -229,37 +228,36 @@ class Server {
       }
       // ensure acceptable headers were included, otherwise respond with 406
       if (req.headers.accept && routeMatch.headers && routeMatch.headers.accept) {
-        const acceptable = routeMatch.headers.accept;
+        const accepts = routeMatch.headers.accept;
         const accept = req.headers.accept;
         let i;
         // scan acceptable MIME types for requested acceptable MIME types
-        for (i = 0; i < acceptable.length; i++) {
-          if (accept.includes(acceptable[i])) break;
+        for (i = 0; i < accepts.length; i++) {
+          if (accept.includes(accepts[i])) break;
         }
         // check acceptable MIME type was found
-        if (i === acceptable.length) {
+        if (i === accepts.length) {
           return this.respond(res, {
-            message: 'Server was not able to match any MIME types specified in ' +
-              'the Accept request HTTP header. To use this resource, please ' +
-              'specify one of the following: ' + acceptable.join(', ')
+            message:
+              'Server was not able to match any MIME types specified in ' +
+              'the Accept request HTTP header. To use this resource, ' +
+              'please specify one of the following: ' + accepts.join(', ')
           }, 406);
         }
       }
       // if a search query is included, ensure query is valid
-      const search = decodeURIComponent(requestURL.search);
-      if (search && routeMatch.param instanceof RegExp) {
-        if (!routeMatch.param.test(search)) {
+      if (search && routeMatch.search instanceof RegExp) {
+        if (!routeMatch.search.test(search)) {
           return this.respond(res, {
-            message: 'Invalid search parameters. Check ' +
-              'https://github.com/chrisdigity/mochimap-api#api-search-parameters',
+            message: 'Invalid search parameters.',
             parameters: search
           }, 400);
         }
         // add search query as parameter
         params.push(search);
-      } else if (routeMatch.paramsRequired) {
+      } else if (routeMatch.searchRequired) {
         return this.respond(res, {
-          message: 'Missing required parameters.'
+          message: 'Missing required search parameters.'
         }, 422);
       }
       // return resulting parameters to handler

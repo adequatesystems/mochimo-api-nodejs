@@ -14,11 +14,17 @@ BigInt.prototype.toJSON = function () { return this.toString(); };
 console.log('\n// START: ' + __filename);
 
 /* regex */
-const regexParams = /^[?]?(?:[0-9a-z]+(?:(?:<>|<=|>=|<|>|=)[0-9a-z-.*]+)?[&|]?)*$/i;
+const searchRegex =
+  /^(?:[0-9a-z]+(?:(?:<>|<|<=|=|>=|>)[0-9a-z-.*]+)?[&|]?)*$/i;
 
 /* modules and utilities */
 const {
-  blockReward, capitalize, projectedSupply, round, rwdShuffle, searchAppend
+  blockReward,
+  capitalize,
+  projectedSupply,
+  round,
+  rwdShuffle,
+  searchAppend
 } = require('./apiUtils');
 const DB = require('./dbmysql');
 const Server = require('./server');
@@ -58,26 +64,15 @@ server.enableRoute({
   method: 'GET',
   path: /^\/$/,
   handler: async (res) => {
-    Promise.allSettled([
-      dbro.promise().query(
-        "SELECT `MEMBER_HOST` as 'member', `MEMBER_STATE` as 'state'" +
-        ' FROM `performance_schema`.`replication_group_members`'),
-      dbro.promise().query(
-        "SELECT `TABLE_NAME` as 'name', `TABLE_ROWS` as 'count'," +
-        " `DATA_LENGTH` as 'size', `INDEX_LENGTH` as 'indexed' FROM" +
-        ' `information_schema`.`tables` WHERE `table_schema` = DATABASE()')
-    ]).then((results) => {
-      const [members] = results[0].value || [results[0].reason];
-      const [tables] = results[1].value || [results[1].reason];
+    dbro.promise().query(
+      "SELECT `MEMBER_HOST` as 'host', `MEMBER_STATE` as 'v'" +
+      ' FROM `performance_schema`.`replication_group_members`'
+    ).then((members) => {
       server.respond(res, {
         status: 'OK',
-        members: members?.reduce((mbrs, { member, state }) => {
-          mbrs[member] = state;
-          return mbrs;
-        }, {}),
-        tables: tables?.reduce((tbls, { name, count, size, indexed }) => {
-          return Object.assign(tbls, { [name]: { count, size, indexed } });
-        }, {})
+        members: Array.isArray(members)
+          ? members.reduce((acc, { host, v }) => ({ [host]: v, ...acc }), {})
+          : members
       }, 200);
     }).catch((error) => server.respond(res, Server.Error(error), 500));
   }
@@ -85,8 +80,8 @@ server.enableRoute({
 server.enableRoute({
   method: 'GET',
   path: /^\/balance(?:\/(tag|address)\/([0-9a-f]+))(?:\/)?$/i,
-  hint: '[BaseURL]/balance/<tag|address>/<addressParameter>',
-  hintCheck: /balance|ledger|delta|tag|address/gi,
+  hint: '[BaseURL]/balance/<"tag"|"address">/<value>',
+  hintCheck: /balance|tag|address/gi,
   handler: async (res, type, address) => {
     // perform balance request
     const isTag = Boolean(type === 'tag');
@@ -131,10 +126,10 @@ server.enableRoute({
 });
 server.enableRoute({
   method: 'GET',
+  search: searchRegex,
   path: /^\/block(?:\/([0-9]+|0x[0-9a-f]+)?)?(?:\/([a-z]+\/?)?)?$/i,
-  param: regexParams,
-  hint: '[BaseURL]/block/[bnum]/[blockParam]',
-  hintCheck: /block|bc/gi,
+  hint: '[BaseURL]/block/[bnum]/[blockParam]?[searchParam]=[searchValue]',
+  hintCheck: /block|blockchain|bc/gi,
   handler: async (res, bnum, bparam, search) => {
     const validParams = [
       'created', 'started', 'type', 'size', 'difficulty', 'bnum',
@@ -274,11 +269,10 @@ server.enableRoute({
   }
 });
 server.enableRoute({
-  method: 'GET',
+  search: searchRegex,
   path: /^\/ledger(?:\/(address|tag)\/([0-9a-f]+))?(?:\/)?$/i,
-  param: regexParams,
-  hint: '[BaseURL]/ledger/[<address|tag>/<addressParameter>]',
-  hintCheck: /ledger|delta|tag|address/gi,
+  hint: '[BaseURL]/ledger/[<"address"|"tag">/<value>]?[searchParam]=[searchValue]',
+  hintCheck: /ledger|neogen|delta|tag|address/gi,
   handler: async (res, type, address, search) => {
     // apply type and address to search parameters
     if (['tag', 'address'].includes(type)) {
@@ -295,7 +289,7 @@ server.enableRoute({
 server.enableRoute({
   method: 'GET',
   path: /^\/network(?:\/(?:(active)|peers\/(active|push|start))?)?(?:\/(?:(?=\d+\.\d+\.\d+\.\d+)((?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.?){4}))?)?$/i,
-  hint: '[BaseURL]/network[/active[/IPv4]||peers</active||push||start>]',
+  hint: '[BaseURL]/network/[active/][IPv4] or [BaseURL]/network/peers/<"active"|"push"|"start">',
   hintCheck: /network|active|peers|push|start/gi,
   handler: (res, status, listType, ip) => {
     const start = Date.now();
@@ -328,10 +322,9 @@ server.enableRoute({
   }
 });
 server.enableRoute({
-  method: 'GET',
+  search: searchRegex,
   path: /^\/richlist(?:\/)?$/i,
-  param: regexParams,
-  hint: '[BaseURL]/richlist',
+  hint: '[BaseURL]/richlist?[searchParam]=[searchValue]',
   hintCheck: /richlist|rank|leaderboard/gi,
   handler: async (res, search) => {
     // perform richlist search
@@ -343,16 +336,25 @@ server.enableRoute({
   }
 });
 server.enableRoute({
-  method: 'GET',
-  path: /^\/transaction(?:\/([0-9a-f]+)?)?$/i,
-  param: regexParams,
-  hint: '[BaseURL]/transaction/[txid]?[searchParameter]=[searchValue]',
+  search: searchRegex,
+  path: /^\/transaction(?:\/(address|tag|txid)\/([0-9a-f]+))?(?:\/)?$/i,
+  hint: '[BaseURL]/transaction/[<"address"|"tag"|"txid">/<value>]?[searchParam]=[searchValue]',
   hintCheck: /transaction/gi,
-  handler: async (res, txid, search) => {
-    // apply txid to search parameters
-    if (txid) search = (search ? search + '&' : '?') + `txid=${txid}*`;
-    // perform transaction search
+  handler: async (res, param, value, search) => {
     const options = { orderby: '`bnum` DESC', search };
+    if (value) {
+      if (!['address', 'tag'].includes(param)) {
+        options.search += `&${param}=${value}`;
+      } else {
+        if (param === 'address') param = 'addr';
+        options.union = [
+          `?src${param}=${value}`,
+          `?dst${param}=${value}`,
+          `?chg${param}=${value}`
+        ];
+      }
+    }
+    // perform transaction search
     dbro.request('transaction', options, (error, results) => {
       if (error) server.respond(res, Server.Error(error), 500);
       else server.respond(res, [...results], 200);
@@ -360,10 +362,10 @@ server.enableRoute({
   }
 });
 server.enableStream({
+  searchRequired: true,
+  search: /^[?]?(?:(?:block|network|transaction)+(?:=|=on)?(?:$|&))+$/i,
   path: /^\/stream(?:\/)?$/,
-  param: /^[?]?(?:(?:block|network|transaction)+(?:=|=on)?(?:$|&))+$/i,
-  paramsRequired: true,
-  hint: '[BaseURL]/stream<?streamTypes>',
+  hint: '[BaseURL]/stream?<types>',
   hintCheck: /stream|block|network|transaction/gi
 }, ['block', 'network', 'transaction']);
 
