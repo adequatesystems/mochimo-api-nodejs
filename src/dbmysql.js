@@ -79,7 +79,7 @@ function queryComponents ({ limit = 10, offset = 0, search, where = '' }) {
 function requestHandler (table, options, callback) {
   // extract query components from search and options
   const { limit, offset, orderby, select = '*', union, where } = {
-    ...options, ...queryComponents({ search: options.search })
+    ...queryComponents({ search: options.search }), ...options
   };
   if (Array.isArray(union) && union.length) {
     const queries = union.map((subsearch) => {
