@@ -211,12 +211,12 @@ server.enableRoute({
             blockTimes += dT;
             nonNeogenesis++;
             if (results[i].type === mochimo.Block.NORMAL) {
-              const { mfee, tcount } = results[i];
+              const { mfee, count } = results[i];
               // process chain data for NORMAL block types
-              transactions += Number(tcount);
+              transactions += Number(count);
               hashesTimes += dT;
               hashes += Math.pow(2, difficulty);
-              rewards += blockReward(results[i].bnum) + (BigInt(mfee) * BigInt(tcount));
+              rewards += blockReward(results[i].bnum) + (BigInt(mfee) * BigInt(count));
             } else pseudorate++; // count PSEUDO block types
           } else if (!totalsupply) {
             // process first (ONLY) (NEO)GENSIS block type
