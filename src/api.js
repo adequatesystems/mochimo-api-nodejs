@@ -186,7 +186,8 @@ server.enableRoute({
       else if (!results.length) {
         server.respond(res, { message: 'Blocks not yet available...' });
       } else {
-        bnum = results[0].bnum;
+        const block = results[0];
+        bnum = block.bnum;
         // deconstruct trailers and perform chain calculations
         let lostsupply, totalsupply, circsupply;
         let rewards = 0n;
@@ -202,20 +203,16 @@ server.enableRoute({
           if (phash && phash !== results[i].bhash) continue;
           phash = results[i].phash;
           if (results[i].type !== mochimo.Block.NEOGENESIS) {
-            const { difficulty, created, started } = results[i];
             // process chain data for non-(NEO)GENSIS block types
-            const stime = Number(new Date(created)) / 1000 | 0;
-            const time0 = Number(new Date(started)) / 1000 | 0;
-            const dT = stime - time0;
-            difficulties += difficulty;
-            blockTimes += dT;
+            difficulties += results[i].difficulty;
+            blockTimes += block.time;
             nonNeogenesis++;
             if (results[i].type === mochimo.Block.NORMAL) {
               const { mfee, count } = results[i];
               // process chain data for NORMAL block types
               transactions += Number(count);
-              hashesTimes += dT;
-              hashes += Math.pow(2, difficulty);
+              hashesTimes += block.time;
+              hashes += Math.pow(2, results[i].difficulty);
               rewards += blockReward(results[i].bnum) + (BigInt(mfee) * BigInt(count));
             } else pseudorate++; // count PSEUDO block types
           } else if (!totalsupply) {
@@ -226,13 +223,9 @@ server.enableRoute({
             circsupply = projectedSupply(results[i].bnum, 1) - lostsupply;
           }
         }
-        const isNeogenesis = results[0].type === mochimo.Block.NEOGENESIS;
-        const isNormal = results[0].type === mochimo.Block.NORMAL;
-        const blocktime = (((new Date(results[0].created)) -
-          (new Date(results[0].started))) / 1000) | 0;
-        const hashrate = round(Math.pow(2, results[0].difficulty) / blocktime);
+        const isNormal = block.type === mochimo.Block.NORMAL;
+        const hashrate = round(Math.pow(2, block.difficulty) / block.time);
         // reconstruct chain data
-        const block = results[0];
         const chain = {
           created: block.created,
           started: block.started,
@@ -242,7 +235,7 @@ server.enableRoute({
           nonce: block.nonce,
           haiku: block.nonce ? mochimo.Trigg.expand(block.nonce) : null,
           bnum: block.bnum,
-          blocktime: blocktime,
+          blocktime: block.time,
           blocktime_avg: round(blockTimes / nonNeogenesis),
           difficulty: block.difficulty,
           difficulty_avg: round(difficulties / nonNeogenesis),
@@ -251,7 +244,7 @@ server.enableRoute({
           pseudorate_avg: round(pseudorate / nonNeogenesis),
           tcount: isNormal ? block.count : null,
           tcount_avg: round(transactions / nonNeogenesis),
-          tcountpsec: isNormal ? round(block.count / blocktime) : null,
+          tcountpsec: isNormal ? round(block.count / block.time) : null,
           tcountpsec_avg: round(transactions / blockTimes),
           mfee: block.mfee,
           txfees: isNormal ? (block.count * block.mfee) / 1e+9 : null,
