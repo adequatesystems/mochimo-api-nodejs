@@ -246,15 +246,16 @@ class Server {
         }
       }
       // if a search query is included, ensure query is valid
+      const searchDecoded = decodeURIComponent(search);
       if (search && routeMatch.search instanceof RegExp) {
-        if (!routeMatch.search.test(search)) {
+        if (!routeMatch.search.test(searchDecoded)) {
           return this.respond(res, {
             message: 'Invalid search parameters.',
-            parameters: search
+            parameters: searchDecoded
           }, 400);
         }
         // add search query as parameter
-        params.push(search);
+        params.push(searchDecoded);
       } else if (routeMatch.searchRequired) {
         return this.respond(res, {
           message: 'Missing required search parameters.'

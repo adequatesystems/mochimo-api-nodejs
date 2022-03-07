@@ -15,7 +15,7 @@ console.log('\n// START: ' + __filename);
 
 /* regex */
 const searchRegex =
-  /^(?:[0-9a-z]+(?:(?:<>|<|<=|=|>=|>)[0-9a-z-.*]+)?[&|]?)*$/i;
+  /^\?(?:[0-9a-z]+(?:(?:<>|<|<=|=|>=|>)[0-9a-z-.*]+)?[&|]?)*$/i;
 
 /* modules and utilities */
 const {
@@ -328,7 +328,7 @@ server.enableRoute({
   hintCheck: /richlist|rank|leaderboard/gi,
   handler: async (res, search) => {
     // perform richlist search
-    const options = { orderby: '`rank` ASC', search };
+    const options = { orderby: '`rank` ASC', limit: 20, search };
     dbro.request('richlist', options, (error, results) => {
       if (error) server.respond(res, Server.Error(error), 500);
       else server.respond(res, [...results], 200);
@@ -343,6 +343,11 @@ server.enableRoute({
   handler: async (res, param, value, search) => {
     const options = { orderby: '`bnum` DESC', search };
     if (value) {
+      // apply length conditioning to value
+      value = param === 'tag'
+        ? value.length < 24 ? value + '*' : value.slice(0, 24)
+        : value.length < 64 ? value + '*' : value.slice(0, 64);
+      // derive search type depending on param
       if (!['address', 'tag'].includes(param)) {
         options.search += `&${param}=${value}`;
       } else {
