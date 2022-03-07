@@ -67,7 +67,7 @@ server.enableRoute({
     dbro.promise().query(
       "SELECT `MEMBER_HOST` as 'host', `MEMBER_STATE` as 'v'" +
       ' FROM `performance_schema`.`replication_group_members`'
-    ).then((members) => {
+    ).then(([members]) => {
       server.respond(res, {
         status: 'OK',
         members: Array.isArray(members)
