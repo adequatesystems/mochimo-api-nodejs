@@ -47,6 +47,7 @@ function queryComponents ({ limit = 10, offset = 0, search, where = '' }) {
               if (offset < 0) offset = 0;
               break;
             default:
+              column = `\`${column}\``;
               value = value.toLowerCase();
               if (['<>', '='].includes(comparitor)) {
                 if (value === 'null') {
