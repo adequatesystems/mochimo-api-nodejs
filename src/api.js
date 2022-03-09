@@ -127,32 +127,18 @@ server.enableRoute({
 server.enableRoute({
   method: 'GET',
   search: searchRegex,
-  path: /^\/block(?:\/([0-9]+|0x[0-9a-f]+)?)?(?:\/([a-z]+\/?)?)?$/i,
-  hint: '[BaseURL]/block/[bnum]/[blockParam]?[searchParam]=[searchValue]',
+  path: /^\/block(?:\/([0-9]{1,20}|0x[0-9a-f]{1,16}){1}(?:\/([0-9a-f]{1,64}){1})?)?(?:\/)?$/i,
+  hint: '[BaseURL]/block/[bnum]/[bhash]?[searchParam]=[searchValue]',
   hintCheck: /block|blockchain|bc/gi,
-  handler: async (res, bnum, bparam, search) => {
-    const validParams = [
-      'created', 'started', 'type', 'size', 'difficulty', 'bnum',
-      'bhash', 'phash', 'mroot', 'nonce', 'maddr', 'mreward',
-      'mfee', 'amount', 'count'
-    ];
-    if (bparam) {
-      if (!validParams.includes(bparam)) {
-        return server.respond(res, {
-          message: `The block data does not contain '${bparam}'...`
-        });
-      }
-    }
-    // apply bnum to search
+  handler: async (res, bnum, bhash, search) => {
+    // add bnum and/or bhash to search
     if (bnum) search = searchAppend(search, `bnum=${Number(bnum)}`);
+    if (bhash) search = searchAppend(search, `bhash=${bhash}`);
     // perform block search
     const options = { orderby: '`bnum` DESC', search };
     dbro.request('block', options, (error, results) => {
       if (error) server.respond(res, Server.Error(error), 500);
-      else {
-        if (bparam) server.respond(res, results[0][bparam], 200);
-        else server.respond(res, [...results], 200);
-      }
+      else server.respond(res, [...results], 200);
     });
   }
 });
