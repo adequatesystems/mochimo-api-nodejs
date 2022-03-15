@@ -47,6 +47,22 @@ const dbopts = {
 };
 const db = new DB({ ...dbopts, port: process.env.DBPORT_RW || dbopts.port });
 const dbro = new DB({ ...dbopts, port: process.env.DBPORT_RO || dbopts.port });
+const dbstats = {};
+const dbscan = () => {
+  // periodic scan of (accurate) table stats
+  setTimeout(dbscan, 3600000); // hourly
+  dbro.promise().query({
+    sql: 'SELECT count(*) FROM `richlist` UNION ' +
+      'SELECT count(*) FROM `ledger` UNION ' +
+      'SELECT count(*) FROM `block` UNION ' +
+      'SELECT count(*) FROM `transaction`',
+    rowsAsArray: true
+  }).then((result) => {
+    const [[[addresses], [deltas], [blocks], [transactions]]] = result;
+    Object.assign(dbstats, { addresses, deltas, blocks, transactions });
+  }).catch(console.error);
+}; // initial scan starts after 30 seconds
+setTimeout(dbscan, 30000);
 
 // create Server instance
 const server = new Server({
@@ -70,6 +86,7 @@ server.enableRoute({
     ).then(([members]) => {
       server.respond(res, {
         status: 'OK',
+        stats: dbstats,
         members: Array.isArray(members)
           ? members.reduce((acc, { host, v }) => ({ [host]: v, ...acc }), {})
           : members
