@@ -12,7 +12,6 @@ const paramSeparatorRegex = /[?&|]/g;
 const stdOpts = {
   waitForConnections: true,
   supportBigNumbers: true,
-  bigNumberStrings: true,
   connectionLimit: 10,
   queueLimit: 0,
   timezone: 'Z'
