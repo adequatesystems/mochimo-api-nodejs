@@ -186,11 +186,10 @@ server.enableRoute({
     const options = { limit: 768, orderby: '`bnum` DESC', search };
     dbro.request('block', options, (error, results) => {
       if (error) server.respond(res, Server.Error(error), 500);
-      else if (!results.length) {
-        server.respond(res, { message: 'Blocks not yet available...' });
+      else if (!results.length || (bnum && results[0].bnum !== bnum)) {
+        server.respond(res, { message: 'Block unavailable...' });
       } else {
         const block = results[0];
-        bnum = block.bnum;
         // deconstruct trailers and perform chain calculations
         let lostsupply, totalsupply, circsupply;
         let rewards = 0n;
@@ -208,13 +207,13 @@ server.enableRoute({
           if (results[i].type !== mochimo.Block.NEOGENESIS) {
             // process chain data for non-(NEO)GENSIS block types
             difficulties += results[i].difficulty;
-            blockTimes += block.time;
+            blockTimes += results[i].time;
             nonNeogenesis++;
             if (results[i].type === mochimo.Block.NORMAL) {
               const { mfee, count } = results[i];
               // process chain data for NORMAL block types
               transactions += Number(count);
-              hashesTimes += block.time;
+              hashesTimes += results[i].time;
               hashes += Math.pow(2, results[i].difficulty);
               rewards += blockReward(results[i].bnum) + (BigInt(mfee) * BigInt(count));
             } else pseudorate++; // count PSEUDO block types
