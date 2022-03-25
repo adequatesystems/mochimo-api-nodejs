@@ -227,6 +227,7 @@ server.enableRoute({
         }
         const isNormal = block.type === mochimo.Block.NORMAL;
         const hashrate = round(Math.pow(2, block.difficulty) / block.time);
+        const numberReward = Number(blockReward(block.bnum));
         // reconstruct chain data
         const chain = {
           created: block.created,
@@ -250,9 +251,9 @@ server.enableRoute({
           tcountpsec_avg: round(transactions / blockTimes),
           mfee: block.mfee,
           txfees: isNormal ? (block.count * block.mfee) / 1e+9 : null,
-          reward: isNormal ? Number(blockReward(bnum)) / 1e+9 : null,
+          reward: isNormal ? numberReward / 1e+9 : null,
           mreward: isNormal
-            ? ((block.count * block.mfee) + Number(blockReward(bnum))) / 1e+9
+            ? ((block.count * block.mfee) + numberReward) / 1e+9
             : null,
           circsupply: Number(circsupply) / 1e+9,
           totalsupply: Number(totalsupply) / 1e+9,
