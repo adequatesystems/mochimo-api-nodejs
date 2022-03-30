@@ -186,7 +186,7 @@ class BlockScanner extends Watcher {
           for (let i = 0; i < blockResults.length; i++) {
             if (blockResults[i].bhash !== phash) continue;
             phash = blockResults[i].phash;
-            if (blockResults[i].bnum === pngbnum.toString()) {
+            if (blockResults[i].bnum.toString() === pngbnum.toString()) {
               pngbhash = blockResults[i].bhash;
               break;
             }
