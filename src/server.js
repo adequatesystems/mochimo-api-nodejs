@@ -175,6 +175,7 @@ class Server {
       'Content-Security-Policy':
         "base-uri 'self'; default-src 'none'; form-action 'self'; " +
         "frame-ancestors 'none'; require-trusted-types-for 'script';",
+      'Cache-Control': 'no-cache',
       'Access-Control-Allow-Origin': '*'
     };
     // send response
