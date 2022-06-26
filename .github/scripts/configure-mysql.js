@@ -91,7 +91,7 @@ shell.getSession().runSql(
     '`created` DATETIME NOT NULL DEFAULT (UTC_TIMESTAMP), ' +
     '`confirmed` DATETIME, ' +
     '`bnum` BIGINT UNSIGNED, ' +
-    '`bhash` CHAR(64) CHARACTER SET `ascii`, ' +
+    '`bhash` CHAR(64) CHARACTER SET `ascii` NOT NULL DEFAULT "", ' +
     '`txid` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
     '`txsig` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
     '`txhash` CHAR(64) CHARACTER SET `ascii` NOT NULL, ' +
@@ -105,7 +105,7 @@ shell.getSession().runSql(
     '`changetotal` BIGINT UNSIGNED NOT NULL, ' +
     '`txfee` BIGINT UNSIGNED NOT NULL, ' +
     '`id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, ' +
-    'CONSTRAINT uid_transaction UNIQUE (`txhash`), ' +
+    'CONSTRAINT uid_transaction UNIQUE (`txhash`, `bhash`), ' +
     'INDEX idx_bnum(`bnum` DESC), ' +
     'INDEX idx_txid (`txid`), ' +
     'INDEX idx_srcaddr(`srcaddr`), ' +
