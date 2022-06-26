@@ -1,9 +1,5 @@
 #!/bin/bash
 
-# install/update Mochimo node (FIRST so it has time to boot)
-bash <(curl -sL \
-  https://github.com/mochimodev/mochimo/raw/master/.github/scripts/setup.x)
-
   echo
 if test -d ~/mochimo-api-nodejs; then
   echo "  Existing API (nodejs) installation detected..."
