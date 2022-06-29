@@ -1,11 +1,12 @@
 #!/bin/bash
+echo
 
-  echo
-if test -d ~/mochimo-api-nodejs; then
+# check for existing API installation
+if test -d ~/api; then
   echo "  Existing API (nodejs) installation detected..."
   echo "  Performing an update of installed Mochimo API (Nodejs)"
   echo
-  cd ~/mochimo-api-nodejs && git pull
+  cd ~/api && git pull
   npm stop && npm install && npm run pm2startup
   echo
   echo "  ====================================="
@@ -14,35 +15,28 @@ if test -d ~/mochimo-api-nodejs; then
   echo
   exit
 fi
-
 # ensure default system apache service is disabled
 systemctl stop apache2 && systemctl disable apache2
 # prepare apt configuration for Nodejs LTS (latest)
 curl -sL https://deb.nodesource.com/setup_lts.x | bash -
 # update and install git/nodejs
 apt update && apt install -y git nodejs
-
-# install Mochimo API components, env vars and dependencies
-git clone --single-branch \
-  https://github.com/adequatesystems/mochimo-api-nodejs ~/mochimo-api-nodejs
-
+# git clone Mochimo API component
+git clone https://github.com/adequatesystems/mochimo-api-nodejs ~/api
 # (re)Install environment variables
-rm -f ~/mochimo-api-nodejs/.env
+rm -f ~/api/.env
 echo
-echo "  Please enter your Mochimo API env vars (as necessary)..."
-read -p 'IPInfo.io Access Token: ' IPINFOTOKEN
+echo "  Please enter the following Mochimo API env vars..."
+read -p 'IPInfo.io Access Token [blank]: ' IPINFOTOKEN
 read -s -p "MySQL password for 'mochimo@localhost': " DBPASS
-echo "NODEIP=$(hostname -I)" >> ~/mochimo-api-nodejs/.env
-echo "IPINFOTOKEN=$IPINFOTOKEN" >> ~/mochimo-api-nodejs/.env
-echo "DBPASS=$DBPASS" >> ~/mochimo-api-nodejs/.env
+echo "NODEIP=$(hostname -I)" >> ~/api/.env
+echo "IPINFOTOKEN=$IPINFOTOKEN" >> ~/api/.env
+echo "DBPASS=$DBPASS" >> ~/api/.env
 unset IPINFOTOKEN
 unset DBPASS
 echo
-
 # Install package dependencies and setup pm2 startup
-cd ~/mochimo-api-nodejs/ && \
-  npm install && npm run pm2setup && npm run pm2startup
-
+cd ~/api && npm install && npm run pm2setup && npm run pm2startup
 echo
 echo "  ===================================="
 echo "  Mochimo API (Nodejs) Setup Complete!"

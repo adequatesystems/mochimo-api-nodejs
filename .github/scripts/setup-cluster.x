@@ -53,7 +53,7 @@ echo "NOTE: MySQL password for 'icadmin' and 'root' are likely the same."
 echo "If you decide to change this, (re)run MySQL Router bootstrap with:"
 echo "  'mysqlrouter --bootstrap icadmin@localhost:3306 --conf-use-sockets --account icrouter'"
 echo
-mysqlrouter --force --user root --bootstrap icadmin@localhost:3306 \
+mysqlrouter --force --user root --bootstrap root@localhost:3306 \
   --conf-use-sockets --account icrouter
 
 cat <<EOF >>/etc/mysqlrouter/mysqlrouter.conf
