@@ -181,6 +181,7 @@ server.enableRoute({
     }
     // apply bnum to search
     let search = '';
+    if (bnum) bnum = Number(bnum);
     if (bnum) search = searchAppend(search, `bnum<=${Number(bnum)}`);
     // perform initial block search
     const options = { limit: 768, orderby: '`bnum` DESC', search };
