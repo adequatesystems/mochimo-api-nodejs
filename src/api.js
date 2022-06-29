@@ -91,7 +91,19 @@ server.enableRoute({
           ? members.reduce((acc, { host, v }) => ({ [host]: v, ...acc }), {})
           : members
       }, 200);
-    }).catch((error) => server.respond(res, Server.Error(error), 500));
+    }).catch((error) => {
+      // try Percona XtraDB Cluster status
+      dbro.promise().query(
+        "SHOW STATUS LIKE 'wsrep_cluster_status'"
+      ).then(([status]) => {
+        server.respond(res, {
+          status: Array.isArray(status) ? status[0]?.Value : status,
+          stats: dbstats
+        }, 200);
+      }).catch((error) => server.respond(res, {
+        message: "Unable to determine API status..."
+      }, 500))
+    });
   }
 });
 server.enableRoute({
