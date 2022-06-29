@@ -29,7 +29,6 @@ echo
 echo "  Please enter the following Mochimo API env vars..."
 read -p 'IPInfo.io Access Token [blank]: ' IPINFOTOKEN
 read -s -p "MySQL password for 'mochimo@localhost': " DBPASS
-echo "NODEIP=$(hostname -I)" >> ~/api/.env
 echo "IPINFOTOKEN=$IPINFOTOKEN" >> ~/api/.env
 echo "DBPASS=$DBPASS" >> ~/api/.env
 unset IPINFOTOKEN
