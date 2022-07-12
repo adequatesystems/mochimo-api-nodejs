@@ -52,6 +52,7 @@ const { NORMAL } = mochimo.Block;
   const COUNT = TFILE.byteLength / mochimo.BlockTrailer.length;
   const Missing = {
     transactions: [],
+    pseudoblocks: [],
     blocks: []
   };
   console.log({ COUNT, Bytes: TFILE.byteLength });
@@ -60,13 +61,17 @@ const { NORMAL } = mochimo.Block;
   console.log('Scanning database...');
   for (let i = 0; i < COUNT; i++) {
     process.stdout.write(`Progress: ${i}/${COUNT} (${parseInt(100 * i / COUNT)}%)\r`);
-    let { bnum, bhash } = TFILE.trailer(i);
+    let { bnum, bhash, tcount } = TFILE.trailer(i);
     bnum = bnum.toString();
     await dbro.promise().query({
       sql: 'SELECT * FROM block WHERE ' +
         `bnum = "${bnum}" AND bhash = "${bhash}"`
     }).then(async ([[block]]) => {
-      if (!block) return Missing.blocks.push({ bnum, bhash, num: 1 });
+      if (!block) {
+        if (BigInt(bnum) & 0xffn && tcount === 0) {
+          return Missing.pseudoblocks.push({ bnum, bhash, num: 1 });
+        } else return Missing.blocks.push({ bnum, bhash, num: 1 });
+      }
       // check transactions
       if (block.type === NORMAL) {
         await dbro.promise().query({
@@ -87,16 +92,7 @@ const { NORMAL } = mochimo.Block;
     }).catch(console.trace);
   }
   return Missing;
-}).then((Missing) => {
-  console.log();
-  console.log('Final counts...');
-  // count missing items
-  console.log(`Blocks missing: ${
-    Missing.blocks.reduce((acc, el) => (acc + el.num), 0)
-  }`);
-  console.log(`Transactions missing: ${
-    Missing.transactions.reduce((acc, el) => (acc + el.num), 0)
-  }`);
+}).then(async (Missing) => {
   console.log();
   console.log('Building final report...');
   const MissingBlocks = Missing.blocks.reduce((acc, blk) => {
@@ -111,6 +107,19 @@ const { NORMAL } = mochimo.Block;
   console.log('Missing data...', '\n', MissingBlocks, '\n', MissingTxs);
   console.log();
   console.log('Writing report to report.txt...');
+  console.log();
+  console.log('Final counts...');
+  // count missing items
+  console.log(`Blocks missing: ${
+    Missing.blocks.reduce((acc, el) => (acc + el.num), 0)
+  }`);
+  console.log(`Pseudo-blocks missing: ${
+    Missing.pseudoblocks.reduce((acc, el) => (acc + el.num), 0)
+  }`);
+  console.log(`Transactions missing: ${
+    Missing.transactions.reduce((acc, el) => (acc + el.num), 0)
+  }`);
+  await fsp.writeFile('./tryagain.sh', TryAgain);
   return fsp.writeFile('./report.txt', MissingBlocks + MissingTxs);
 }).catch(console.trace).finally(() => {
   process.exit();
