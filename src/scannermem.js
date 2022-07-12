@@ -16,7 +16,7 @@ class MempoolScanner extends Watcher {
   constructor ({ db, emit, target, scanOnly }) {
     // apply default target
     if (typeof target !== 'string') {
-      target = '/home/mochimo-node/mochimo/bin/d/txclean.dat';
+      target = '/home/mochimo/main/bin/d/txclean.dat';
     }
     // Watcher()
     super({ name: 'MEMSCANNER', target, scanOnly });

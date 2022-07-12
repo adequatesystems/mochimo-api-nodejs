@@ -71,8 +71,10 @@ const server = new Server({
 });
 
 // start scanners
-const blkscanner = new BlkScanner({ db, emit: server.stream.bind(server) });
-const memscanner = new MemScanner({ db, emit: server.stream.bind(server) });
+const blkscanner = new BlkScanner({
+  db, emit: server.stream.bind(server), target: process.env.TARGET_BC });
+const memscanner = new MemScanner({
+  db, emit: server.stream.bind(server), target: process.env.TARGET_MEM });
 const netscanner = new NetScanner({ db, emit: server.stream.bind(server) });
 
 /* route configuration */

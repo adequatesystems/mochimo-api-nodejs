@@ -44,7 +44,7 @@ class BlockScanner extends Watcher {
     backupdir = backupdir || path.join(process.cwd(), 'backup');
     name = name || 'BlockchainScanner';
     target = target || path.join(
-      path.sep, 'home', 'mochimo-node', 'mochimo', 'bin', 'd', 'bc'
+      path.sep, 'home', 'mochimo', 'main', 'bin', 'd', 'bc'
     );
     // Watcher()
     super({ name: 'BLKSCANNER', target, scanOnly });
