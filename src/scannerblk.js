@@ -152,7 +152,15 @@ class BlockScanner extends Watcher {
             }
           })()).pipe(new PassThrough());
           await connection.query({ sql, infileStreamFactory });
-          // insert into transaction table with temp table (IODKU)
+          // first update all unconfirmed transactions
+          await connection.query(
+            'UPDATE `transaction` INNER JOIN ' + table +
+            ' ON ( `transaction`.`bhash` = "" AND ' +
+            ' `transaction`.`txhash` = ' + table + '.`txhash` )' +
+            ' SET `transaction`.`confirmed` = ' + table + '.`confirmed`,' +
+            ' `transaction`.`bnum` = ' + table + '.`bnum`,' +
+            ' `transaction`.`bhash` = ' + table + '.`bhash`');
+          // insert into transaction table with temp table (IODKI)
           await connection.query(
             'INSERT INTO `transaction` (`created`, `confirmed`, `bnum`,' +
             ' `bhash`, `txid`, `txsig`, `txhash`, `srcaddr`, `srctag`,' +
@@ -161,8 +169,7 @@ class BlockScanner extends Watcher {
             ' `bnum`, `bhash`, `txid`, `txsig`, `txhash`, `srcaddr`,' +
             ' `srctag`, `dstaddr`, `dsttag`, `chgaddr`, `chgtag`,' +
             ' `sendtotal`, `changetotal`, `txfee` from ' + table +
-            ' ON DUPLICATE KEY UPDATE `confirmed` = VALUES(`confirmed`),' +
-            ' `bnum` = VALUES(`bnum`), `bhash` = VALUES(`bhash`)');
+            ' ON DUPLICATE KEY IGNORE');
         } catch (error) {
           console.error(this.name, '// TRANSACTION', error);
         } finally {

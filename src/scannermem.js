@@ -59,16 +59,19 @@ class MempoolScanner extends Watcher {
           const txentry = new mochimo.TXEntry(txebuffer);
           const txjson = txentry.toJSON(true);
           txjson.txhash = sha256(txentry);
-          // insert "unconfirmed" transaction to db
           if (this.db) {
-            this.db.query('INSERT INTO `transaction` SET ?', txjson,
-              (error) => {
-                if (error) {
-                  if (error.code !== 'ER_DUP_ENTRY') {
-                    // report error
-                    console.error(error);
-                  } // else ignore
-                }
+            // check txhash does not already exist
+            this.db.query('SELECT * FROM `transaction` where `txhash` = ?',
+              txjson.txhash, (error, results) => {
+                if (error) return console.error(error);
+                if (results.length) return; // ignore dup
+                // insert "unconfirmed" transaction to db
+                this.db.query('INSERT INTO `transaction` SET ?', txjson,
+                  (error) => {  // report NON-ER_DUP_ENTRY errors
+                    if (error && error.code !== 'ER_DUP_ENTRY') {
+                      console.error(error);
+                    }
+                  });
               });
           }
           // return transaction in callback
